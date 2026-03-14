@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+
+    <table name="elielweb_compositor_family" resource="default" engine="innodb" comment="VisualCompositor Families">
+        <column xsi:type="int" name="family_id" unsigned="true" nullable="false" identity="true" comment="Family ID"/>
+        <column xsi:type="varchar" name="code" nullable="false" length="64" comment="Family Code"/>
+        <column xsi:type="varchar" name="label" nullable="false" length="255" comment="Family Label"/>
+        <column xsi:type="smallint" name="active" nullable="false" default="1" comment="Active"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="family_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="UNQ_FAMILY_CODE">
+            <column name="code"/>
+        </constraint>
+    </table>
+
+    <table name="elielweb_compositor_layer" resource="default" engine="innodb" comment="VisualCompositor Layers">
+        <column xsi:type="int" name="layer_id" unsigned="true" nullable="false" identity="true" comment="Layer ID"/>
+        <column xsi:type="int" name="family_id" unsigned="true" nullable="false" comment="Family ID"/>
+        <column xsi:type="varchar" name="code" nullable="false" length="64" comment="Layer Code"/>
+        <column xsi:type="varchar" name="label" nullable="false" length="255" comment="Layer Label"/>
+        <column xsi:type="int" name="sort_order" nullable="false" default="0" comment="Sort Order"/>
+        <column xsi:type="varchar" name="layer_type" nullable="false" length="32" default="fixed" comment="Layer Type"/>
+        <column xsi:type="varchar" name="option_code" nullable="true" length="128" comment="Option Code"/>
+        <column xsi:type="varchar" name="default_file" nullable="true" length="512" comment="Default File"/>
+        <column xsi:type="smallint" name="active" nullable="false" default="1" comment="Active"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="layer_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="FK_LAYER_FAMILY"
+                    table="elielweb_compositor_layer" column="family_id"
+                    referenceTable="elielweb_compositor_family" referenceColumn="family_id"
+                    onDelete="CASCADE"/>
+    </table>
+
+    <table name="elielweb_compositor_mapping" resource="default" engine="innodb" comment="VisualCompositor Mappings">
+        <column xsi:type="int" name="mapping_id" unsigned="true" nullable="false" identity="true" comment="Mapping ID"/>
+        <column xsi:type="int" name="layer_id" unsigned="true" nullable="false" comment="Layer ID"/>
+        <column xsi:type="varchar" name="option_value" nullable="false" length="255" comment="Option Value"/>
+        <column xsi:type="varchar" name="png_file" nullable="false" length="512" comment="PNG File"/>
+        <column xsi:type="varchar" name="product_sku" nullable="true" length="64" comment="Product SKU"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="mapping_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="FK_MAPPING_LAYER"
+                    table="elielweb_compositor_mapping" column="layer_id"
+                    referenceTable="elielweb_compositor_layer" referenceColumn="layer_id"
+                    onDelete="CASCADE"/>
+    </table>
+
+    <table name="elielweb_compositor_product" resource="default" engine="innodb" comment="VisualCompositor Product/Family">
+        <column xsi:type="int" name="id" unsigned="true" nullable="false" identity="true" comment="ID"/>
+        <column xsi:type="int" name="product_id" unsigned="true" nullable="false" comment="Product ID"/>
+        <column xsi:type="int" name="family_id" unsigned="true" nullable="false" comment="Family ID"/>
+        <column xsi:type="smallint" name="active" nullable="false" default="1" comment="Active"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="UNQ_COMPOSITOR_PRODUCT">
+            <column name="product_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="FK_COMPOSITOR_PRODUCT_FAMILY"
+                    table="elielweb_compositor_product" column="family_id"
+                    referenceTable="elielweb_compositor_family" referenceColumn="family_id"
+                    onDelete="CASCADE"/>
+    </table>
+</schema>
