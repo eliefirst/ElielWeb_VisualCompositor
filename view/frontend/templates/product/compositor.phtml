@@ -1,0 +1,273 @@
+<?php
+/**
+ * ElielWeb VisualCompositor - Canvas overlay mobile first
+ *
+ * @var \Magento\Framework\View\Element\Template $block
+ * @var \ElielWeb\VisualCompositor\ViewModel\ProductCompositor $compositorViewModel
+ * @var \Magento\Catalog\Model\Product $product
+ */
+
+$product          = $block->getProduct();
+$compositorViewModel = $block->getData('compositor_view_model');
+
+if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) {
+    return;
+}
+
+$configJson = $compositorViewModel->getConfigJson($product);
+if ($configJson === '{}') {
+    return;
+}
+?>
+
+<div id="visual-compositor-wrap"
+     class="visual-compositor-wrap"
+     x-data="visualCompositor(<?= $escaper->escapeHtmlAttr($configJson) ?>)"
+     x-init="init()"
+     @option-selected.window="onOptionSelected($event.detail)"
+     @compositor-gold-selected.window="onGoldSelected($event.detail)">
+
+    <!-- Canvas overlay positionné sur la galerie -->
+    <canvas x-ref="compositorCanvas"
+            class="compositor-canvas"
+            :class="{ 'compositor-ready': ready, 'compositor-loading': !ready }"
+            aria-hidden="true">
+    </canvas>
+
+    <!-- Loader mobile friendly -->
+    <div class="compositor-loader" x-show="loading" x-cloak>
+        <div class="compositor-spinner"></div>
+    </div>
+</div>
+
+<script>
+function visualCompositor(config) {
+    return {
+        config: config,
+        ready: false,
+        loading: false,
+        images: {},           // cache images chargées { url: HTMLImageElement }
+        currentLayers: {},    // { layerCode: url }
+        canvas: null,
+        ctx: null,
+        galleryEl: null,
+        resizeObserver: null,
+
+        init() {
+            if (!config || !config.enabled) return;
+            this.$nextTick(() => {
+                this.canvas = this.$refs.compositorCanvas;
+                this.ctx    = this.canvas.getContext('2d');
+                this.mountOnGallery();
+                this.preloadFixedLayers();
+            });
+        },
+
+        // Trouve la galerie Hyvä et positionne le canvas dessus
+        mountOnGallery() {
+            // Sélecteurs Hyvä galerie
+            const selectors = [
+                '[data-gallery-role="gallery"]',
+                '.gallery-placeholder',
+                '.product-media',
+                'figure.product-item-photo',
+                '[x-data*="initGallery"]',
+                '.fotorama',
+                '.product.media'
+            ];
+
+            for (const sel of selectors) {
+                this.galleryEl = document.querySelector(sel);
+                if (this.galleryEl) break;
+            }
+
+            if (!this.galleryEl) {
+                // Fallback : chercher la première image produit
+                const img = document.querySelector('.product-detail-page img, .catalog-product-view img');
+                if (img) this.galleryEl = img.closest('div') || img.parentElement;
+            }
+
+            if (!this.galleryEl) return;
+
+            // Positionner le canvas en overlay
+            const wrap = document.getElementById('visual-compositor-wrap');
+            if (wrap) {
+                this.galleryEl.style.position = 'relative';
+                this.galleryEl.appendChild(wrap);
+            }
+
+            this.fitCanvas();
+
+            // Responsive : resize observer mobile/desktop
+            this.resizeObserver = new ResizeObserver(() => {
+                this.fitCanvas();
+                if (this.ready) this.render();
+            });
+            this.resizeObserver.observe(this.galleryEl);
+        },
+
+        fitCanvas() {
+            if (!this.galleryEl || !this.canvas) return;
+            const rect = this.galleryEl.getBoundingClientRect();
+            const w = rect.width  || this.galleryEl.offsetWidth  || 600;
+            const h = rect.height || this.galleryEl.offsetHeight || 600;
+            this.canvas.width  = w;
+            this.canvas.height = h;
+            this.canvas.style.width  = w + 'px';
+            this.canvas.style.height = h + 'px';
+        },
+
+        // Précharge les couches fixes au chargement
+        preloadFixedLayers() {
+            const fixedLayers = (config.layers || []).filter(l => l.type === 'fixed' && l.default_url);
+            if (!fixedLayers.length) { this.ready = true; return; }
+
+            let loaded = 0;
+            fixedLayers.forEach(layer => {
+                this.loadImage(layer.default_url).then(() => {
+                    this.currentLayers[layer.code] = layer.default_url;
+                    loaded++;
+                    if (loaded === fixedLayers.length) {
+                        this.ready = true;
+                        this.render();
+                    }
+                });
+            });
+        },
+
+        // Charge une image avec cache
+        loadImage(url) {
+            if (this.images[url]) {
+                return Promise.resolve(this.images[url]);
+            }
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload  = () => { this.images[url] = img; resolve(img); };
+                img.onerror = () => reject(new Error('Failed: ' + url));
+                img.src = url;
+            });
+        },
+
+        // Écoute les sélections d'options (couleur fil, etc.)
+        onOptionSelected(detail) {
+            const { optionId, valueId, price } = detail;
+            // Trouver la couche correspondant à cet optionId
+            const layer = (config.layers || []).find(l => {
+                return l.option_code && l.option_code == optionId;
+            });
+            if (!layer) return;
+
+            const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
+            if (!url) return;
+
+            this.loading = true;
+            this.loadImage(url).then(() => {
+                this.currentLayers[layer.code] = url;
+                this.render();
+                this.loading = false;
+            }).catch(() => { this.loading = false; });
+        },
+
+        // Écoute la sélection de couleur or
+        onGoldSelected(detail) {
+            const { goldCode } = detail;
+            // Couches pilotées par gold_color (setting, clasp)
+            const goldLayers = (config.layers || []).filter(l =>
+                l.option_code === 'gold_color' || l.code === 'setting' || l.code === 'clasp'
+            );
+            if (!goldLayers.length) return;
+
+            this.loading = true;
+            let pending = goldLayers.length;
+            goldLayers.forEach(layer => {
+                const url = layer.mappings[goldCode];
+                if (!url) { pending--; if (!pending) { this.render(); this.loading = false; } return; }
+                this.loadImage(url).then(() => {
+                    this.currentLayers[layer.code] = url;
+                    pending--;
+                    if (!pending) { this.render(); this.loading = false; }
+                }).catch(() => { pending--; if (!pending) { this.render(); this.loading = false; } });
+            });
+        },
+
+        // Rendu canvas : superpose les couches dans l'ordre sort_order
+        render() {
+            if (!this.ctx || !this.canvas) return;
+            const w = this.canvas.width;
+            const h = this.canvas.height;
+            this.ctx.clearRect(0, 0, w, h);
+
+            const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+            orderedLayers.forEach(layer => {
+                const url = this.currentLayers[layer.code];
+                if (!url || !this.images[url]) return;
+                try {
+                    this.ctx.drawImage(this.images[url], 0, 0, w, h);
+                } catch(e) {
+                    console.warn('Compositor render error:', layer.code, e);
+                }
+            });
+        },
+
+        destroy() {
+            if (this.resizeObserver) this.resizeObserver.disconnect();
+        }
+    }
+}
+</script>
+
+<style>
+[x-cloak] { display: none !important; }
+
+.visual-compositor-wrap {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.compositor-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.compositor-canvas.compositor-ready {
+    opacity: 1;
+}
+
+.compositor-loader {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.5);
+    z-index: 11;
+}
+
+.compositor-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #1a1a1a;
+    border-radius: 50%;
+    animation: compositor-spin 0.8s linear infinite;
+}
+
+@keyframes compositor-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Mobile first */
+@media (max-width: 767px) {
+    .compositor-canvas {
+        touch-action: none;
+    }
+}
+</style>
