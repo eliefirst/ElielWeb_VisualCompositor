@@ -17,10 +17,11 @@ class InstallCompositorSchema implements DataPatchInterface
 
     public function apply(): void
     {
-        $this->moduleDataSetup->startSetup();
         $conn = $this->moduleDataSetup->getConnection();
 
-        // Table familles
+        // Désactiver le mode transaction pour les DDL
+        $conn->query('SET autocommit = 1');
+
         if (!$conn->isTableExists('elielweb_compositor_family')) {
             $conn->query("CREATE TABLE `elielweb_compositor_family` (
                 `family_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -33,7 +34,6 @@ class InstallCompositorSchema implements DataPatchInterface
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Families'");
         }
 
-        // Table couches
         if (!$conn->isTableExists('elielweb_compositor_layer')) {
             $conn->query("CREATE TABLE `elielweb_compositor_layer` (
                 `layer_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -51,7 +51,6 @@ class InstallCompositorSchema implements DataPatchInterface
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Layers'");
         }
 
-        // Table mappings
         if (!$conn->isTableExists('elielweb_compositor_mapping')) {
             $conn->query("CREATE TABLE `elielweb_compositor_mapping` (
                 `mapping_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -65,7 +64,6 @@ class InstallCompositorSchema implements DataPatchInterface
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Mappings'");
         }
 
-        // Table produit/famille
         if (!$conn->isTableExists('elielweb_compositor_product')) {
             $conn->query("CREATE TABLE `elielweb_compositor_product` (
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -74,12 +72,13 @@ class InstallCompositorSchema implements DataPatchInterface
                 `active` SMALLINT NOT NULL DEFAULT 1,
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `UNQ_PRODUCT` (`product_id`),
-                CONSTRAINT `FK_PRODUCT_FAMILY` FOREIGN KEY (`family_id`)
+                CONSTRAINT `FK_COMPOSITOR_PRODUCT_FAMILY` FOREIGN KEY (`family_id`)
                     REFERENCES `elielweb_compositor_family` (`family_id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Product/Family'");
         }
 
-        // Attribut EAV dynamic_image_enabled
+        // Attribut EAV - pas de DDL, autorisé en DataPatch
+        $this->moduleDataSetup->startSetup();
         $eavSetup = $this->eavSetupFactory->create(['setup' => $this->moduleDataSetup]);
         if (!$eavSetup->getAttributeId(Product::ENTITY, 'dynamic_image_enabled')) {
             $eavSetup->addAttribute(Product::ENTITY, 'dynamic_image_enabled', [
@@ -102,7 +101,6 @@ class InstallCompositorSchema implements DataPatchInterface
                 'sort_order'              => 100,
             ]);
         }
-
         $this->moduleDataSetup->endSetup();
     }
 
