@@ -18,78 +18,65 @@ class InstallCompositorSchema implements DataPatchInterface
     public function apply(): void
     {
         $this->moduleDataSetup->startSetup();
-        $setup = $this->moduleDataSetup;
-        $conn  = $setup->getConnection();
+        $conn = $this->moduleDataSetup->getConnection();
 
         // Table familles
-        if (!$conn->isTableExists($setup->getTable('elielweb_compositor_family'))) {
-            $table = $conn->newTable($setup->getTable('elielweb_compositor_family'))
-                ->addColumn('family_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true])
-                ->addColumn('code', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 64, ['nullable' => false])
-                ->addColumn('label', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 255, ['nullable' => false])
-                ->addColumn('active', \Magento\Framework\DB\Ddl\Table::TYPE_SMALLINT, null, ['nullable' => false, 'default' => 1])
-                ->addColumn('created_at', \Magento\Framework\DB\Ddl\Table::TYPE_TIMESTAMP, null, ['nullable' => false, 'default' => \Magento\Framework\DB\Ddl\Table::TIMESTAMP_INIT])
-                ->addIndex($setup->getIdxName('elielweb_compositor_family', ['code']), ['code'], ['type' => 'unique'])
-                ->setComment('VisualCompositor Families');
-            $conn->createTable($table);
+        if (!$conn->isTableExists('elielweb_compositor_family')) {
+            $conn->query("CREATE TABLE `elielweb_compositor_family` (
+                `family_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `code` VARCHAR(64) NOT NULL,
+                `label` VARCHAR(255) NOT NULL,
+                `active` SMALLINT NOT NULL DEFAULT 1,
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`family_id`),
+                UNIQUE KEY `UNQ_FAMILY_CODE` (`code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Families'");
         }
 
         // Table couches
-        if (!$conn->isTableExists($setup->getTable('elielweb_compositor_layer'))) {
-            $table = $conn->newTable($setup->getTable('elielweb_compositor_layer'))
-                ->addColumn('layer_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true])
-                ->addColumn('family_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['unsigned' => true, 'nullable' => false])
-                ->addColumn('code', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 64, ['nullable' => false])
-                ->addColumn('label', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 255, ['nullable' => false])
-                ->addColumn('sort_order', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['nullable' => false, 'default' => 0])
-                ->addColumn('layer_type', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 32, ['nullable' => false, 'default' => 'fixed'])
-                ->addColumn('option_code', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 128, ['nullable' => true])
-                ->addColumn('default_file', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 512, ['nullable' => true])
-                ->addColumn('active', \Magento\Framework\DB\Ddl\Table::TYPE_SMALLINT, null, ['nullable' => false, 'default' => 1])
-                ->addForeignKey(
-                    $setup->getFkName('elielweb_compositor_layer', 'family_id', 'elielweb_compositor_family', 'family_id'),
-                    'family_id', $setup->getTable('elielweb_compositor_family'), 'family_id',
-                    \Magento\Framework\DB\Ddl\Table::ACTION_CASCADE
-                )
-                ->setComment('VisualCompositor Layers');
-            $conn->createTable($table);
+        if (!$conn->isTableExists('elielweb_compositor_layer')) {
+            $conn->query("CREATE TABLE `elielweb_compositor_layer` (
+                `layer_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `family_id` INT UNSIGNED NOT NULL,
+                `code` VARCHAR(64) NOT NULL,
+                `label` VARCHAR(255) NOT NULL,
+                `sort_order` INT NOT NULL DEFAULT 0,
+                `layer_type` VARCHAR(32) NOT NULL DEFAULT 'fixed',
+                `option_code` VARCHAR(128) DEFAULT NULL,
+                `default_file` VARCHAR(512) DEFAULT NULL,
+                `active` SMALLINT NOT NULL DEFAULT 1,
+                PRIMARY KEY (`layer_id`),
+                CONSTRAINT `FK_LAYER_FAMILY` FOREIGN KEY (`family_id`)
+                    REFERENCES `elielweb_compositor_family` (`family_id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Layers'");
         }
 
         // Table mappings
-        if (!$conn->isTableExists($setup->getTable('elielweb_compositor_mapping'))) {
-            $table = $conn->newTable($setup->getTable('elielweb_compositor_mapping'))
-                ->addColumn('mapping_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true])
-                ->addColumn('layer_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['unsigned' => true, 'nullable' => false])
-                ->addColumn('option_value', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 255, ['nullable' => false])
-                ->addColumn('png_file', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 512, ['nullable' => false])
-                ->addColumn('product_sku', \Magento\Framework\DB\Ddl\Table::TYPE_TEXT, 64, ['nullable' => true])
-                ->addForeignKey(
-                    $setup->getFkName('elielweb_compositor_mapping', 'layer_id', 'elielweb_compositor_layer', 'layer_id'),
-                    'layer_id', $setup->getTable('elielweb_compositor_layer'), 'layer_id',
-                    \Magento\Framework\DB\Ddl\Table::ACTION_CASCADE
-                )
-                ->setComment('VisualCompositor Mappings');
-            $conn->createTable($table);
+        if (!$conn->isTableExists('elielweb_compositor_mapping')) {
+            $conn->query("CREATE TABLE `elielweb_compositor_mapping` (
+                `mapping_id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `layer_id` INT UNSIGNED NOT NULL,
+                `option_value` VARCHAR(255) NOT NULL,
+                `png_file` VARCHAR(512) NOT NULL,
+                `product_sku` VARCHAR(64) DEFAULT NULL,
+                PRIMARY KEY (`mapping_id`),
+                CONSTRAINT `FK_MAPPING_LAYER` FOREIGN KEY (`layer_id`)
+                    REFERENCES `elielweb_compositor_layer` (`layer_id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Mappings'");
         }
 
         // Table produit/famille
-        if (!$conn->isTableExists($setup->getTable('elielweb_compositor_product'))) {
-            $table = $conn->newTable($setup->getTable('elielweb_compositor_product'))
-                ->addColumn('id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true])
-                ->addColumn('product_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['unsigned' => true, 'nullable' => false])
-                ->addColumn('family_id', \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER, null, ['unsigned' => true, 'nullable' => false])
-                ->addColumn('active', \Magento\Framework\DB\Ddl\Table::TYPE_SMALLINT, null, ['nullable' => false, 'default' => 1])
-                ->addIndex(
-                    $setup->getIdxName('elielweb_compositor_product', ['product_id'], 'unique'),
-                    ['product_id'], ['type' => 'unique']
-                )
-                ->addForeignKey(
-                    $setup->getFkName('elielweb_compositor_product', 'family_id', 'elielweb_compositor_family', 'family_id'),
-                    'family_id', $setup->getTable('elielweb_compositor_family'), 'family_id',
-                    \Magento\Framework\DB\Ddl\Table::ACTION_CASCADE
-                )
-                ->setComment('VisualCompositor Product/Family associations');
-            $conn->createTable($table);
+        if (!$conn->isTableExists('elielweb_compositor_product')) {
+            $conn->query("CREATE TABLE `elielweb_compositor_product` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `product_id` INT UNSIGNED NOT NULL,
+                `family_id` INT UNSIGNED NOT NULL,
+                `active` SMALLINT NOT NULL DEFAULT 1,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `UNQ_PRODUCT` (`product_id`),
+                CONSTRAINT `FK_PRODUCT_FAMILY` FOREIGN KEY (`family_id`)
+                    REFERENCES `elielweb_compositor_family` (`family_id`) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='VisualCompositor Product/Family'");
         }
 
         // Attribut EAV dynamic_image_enabled
