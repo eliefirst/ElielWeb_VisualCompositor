@@ -114,6 +114,7 @@ class CompositionService
                 'id'          => $layer->getLayerId(),
                 'code'        => $layer->getCode(),
                 'type'        => $layer->getLayerType(),
+                'sort_order'  => $layer->getSortOrder(),
                 'option_code' => $layer->getOptionCode(),
                 'default_file'=> $layer->getDefaultFile(),
                 'mappings'    => []
@@ -121,17 +122,19 @@ class CompositionService
 
             // Pour les couches de type 'option', charger tous les mappings disponibles
             if ($layer->getLayerType() === 'option') {
-                $mappings = $this->mappingCollectionFactory->create();
-                $mappings->addFieldToFilter('layer_id', $layer->getLayerId());
+                // Priorité 1 : mappings famille (product_sku = NULL)
+                $familyMappings = $this->mappingCollectionFactory->create();
+                $familyMappings->addFieldToFilter('layer_id', $layer->getLayerId())
+                               ->addFieldToFilter('product_sku', ['null' => true]);
+                foreach ($familyMappings as $mapping) {
+                    $layerData['mappings'][$mapping->getOptionValue()] = $mapping->getPngFile();
+                }
 
-                // Mappings spécifiques produit en priorité
-                $skuFilter = [
-                    ['null' => true],
-                    ['eq'   => $product->getSku()]
-                ];
-                $mappings->addFieldToFilter('product_sku', $skuFilter);
-
-                foreach ($mappings as $mapping) {
+                // Priorité 2 : mappings produit-spécifiques écrasent les mappings famille
+                $productMappings = $this->mappingCollectionFactory->create();
+                $productMappings->addFieldToFilter('layer_id', $layer->getLayerId())
+                                ->addFieldToFilter('product_sku', ['eq' => $product->getSku()]);
+                foreach ($productMappings as $mapping) {
                     $layerData['mappings'][$mapping->getOptionValue()] = $mapping->getPngFile();
                 }
             }
