@@ -64,16 +64,18 @@ function visualCompositor(config) {
         },
 
         // Trouve la galerie Hyvä et positionne le canvas dessus
-        mountOnGallery() {
-            // Sélecteurs Hyvä galerie
+        mountOnGallery(attempt = 0) {
+            // Sélecteurs Hyvä galerie (du plus précis au plus générique)
             const selectors = [
+                '[data-gallery-role="gallery-placeholder"]',
                 '[data-gallery-role="gallery"]',
                 '.gallery-placeholder',
-                '.product-media',
-                'figure.product-item-photo',
                 '[x-data*="initGallery"]',
+                '[x-data*="gallery"]',
+                '.product-media',
+                '.product.media',
+                'figure.product-item-photo',
                 '.fotorama',
-                '.product.media'
             ];
 
             for (const sel of selectors) {
@@ -83,13 +85,19 @@ function visualCompositor(config) {
 
             if (!this.galleryEl) {
                 // Fallback : chercher la première image produit
-                const img = document.querySelector('.product-detail-page img, .catalog-product-view img');
+                const img = document.querySelector('.catalog-product-view img');
                 if (img) this.galleryEl = img.closest('div') || img.parentElement;
             }
 
-            if (!this.galleryEl) return;
+            // Retry si la galerie n'est pas encore montée par Alpine (jusqu'à 5 tentatives)
+            if (!this.galleryEl) {
+                if (attempt < 5) {
+                    setTimeout(() => this.mountOnGallery(attempt + 1), 300);
+                }
+                return;
+            }
 
-            // Positionner le canvas en overlay
+            // Positionner le canvas en overlay sur la galerie
             const wrap = document.getElementById('visual-compositor-wrap');
             if (wrap) {
                 this.galleryEl.style.position = 'relative';
