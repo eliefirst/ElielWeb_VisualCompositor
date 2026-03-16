@@ -7,7 +7,7 @@
  * @var \Magento\Catalog\Model\Product $product
  */
 
-$product          = $block->getProduct();
+$product = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
 
 if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) {
