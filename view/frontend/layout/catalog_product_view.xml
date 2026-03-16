@@ -2,17 +2,17 @@
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <body>
-        <referenceBlock name="product.media">
+        <referenceContainer name="product.info.media">
             <block class="Magento\Catalog\Block\Product\View"
                    name="product.visual.compositor"
                    template="ElielWeb_VisualCompositor::product/compositor.phtml"
-                   after="-">
+                   after="product.media">
                 <arguments>
                     <argument name="compositor_view_model" xsi:type="object">
                         ElielWeb\VisualCompositor\ViewModel\ProductCompositor
                     </argument>
                 </arguments>
             </block>
-        </referenceBlock>
+        </referenceContainer>
     </body>
 </page>
