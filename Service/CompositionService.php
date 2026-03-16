@@ -92,10 +92,6 @@ class CompositionService
      */
     public function buildFrontConfig(ProductInterface $product): array
     {
-        if (!$this->isEligible($product)) {
-            return [];
-        }
-
         $family = $this->getFamilyForProduct($product);
         if (!$family) {
             return [];
