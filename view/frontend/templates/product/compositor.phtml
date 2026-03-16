@@ -10,7 +10,7 @@
 $product = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
 
-if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) {
+if (!$compositorViewModel) {
     return;
 }
 
