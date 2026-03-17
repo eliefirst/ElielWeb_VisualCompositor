@@ -30,9 +30,7 @@ if ($configJson === '{}') {
 <div id="visual-compositor-wrap"
      class="visual-compositor-wrap"
      x-data="visualCompositor(<?= $escaper->escapeHtmlAttr($configJson) ?>)"
-     x-init="init()"
-     @option-selected.window="onOptionSelected($event.detail)"
-     @compositor-gold-selected.window="onGoldSelected($event.detail)">
+     x-init="init()">
 
     <!-- Canvas overlay positionné sur la galerie -->
     <canvas x-ref="compositorCanvas"
@@ -68,6 +66,12 @@ function visualCompositor(config) {
                 this.ctx    = this.canvas.getContext('2d');
                 this.mountOnGallery();
                 this.preloadFixedLayers();
+
+                // Vanilla JS listeners pour éviter le SyntaxError Alpine sur noms avec tirets
+                this._onOptionSelected = (e) => this.onOptionSelected(e.detail);
+                this._onGoldSelected   = (e) => this.onGoldSelected(e.detail);
+                window.addEventListener('option-selected', this._onOptionSelected);
+                window.addEventListener('compositor-gold-selected', this._onGoldSelected);
             });
         },
 
@@ -231,11 +235,12 @@ function visualCompositor(config) {
             const h = this.canvas.height;
             this.ctx.clearRect(0, 0, w, h);
 
-            // Fond blanc opaque seulement quand l'utilisateur a fait une sélection
-            if (this.visible) {
-                this.ctx.fillStyle = '#ffffff';
-                this.ctx.fillRect(0, 0, w, h);
-            }
+            // Ne rien dessiner tant que l'utilisateur n'a pas fait de sélection
+            if (!this.visible) return;
+
+            // Fond blanc opaque pour masquer la photo galerie en dessous du canvas
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(0, 0, w, h);
 
             const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
@@ -252,6 +257,8 @@ function visualCompositor(config) {
 
         destroy() {
             if (this.resizeObserver) this.resizeObserver.disconnect();
+            if (this._onOptionSelected) window.removeEventListener('option-selected', this._onOptionSelected);
+            if (this._onGoldSelected)   window.removeEventListener('compositor-gold-selected', this._onGoldSelected);
         }
     }
 }
