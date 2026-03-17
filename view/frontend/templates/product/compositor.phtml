@@ -112,6 +112,8 @@ function visualCompositor(config) {
             }
 
             this.fitCanvas();
+            // Re-rendu si les images fixes étaient déjà chargées avant que la galerie soit trouvée
+            if (this.ready) this.render();
 
             // Responsive : resize observer mobile/desktop
             this.resizeObserver = new ResizeObserver(() => {
@@ -139,14 +141,20 @@ function visualCompositor(config) {
 
             let loaded = 0;
             fixedLayers.forEach(layer => {
-                this.loadImage(layer.default_url).then(() => {
-                    this.currentLayers[layer.code] = layer.default_url;
-                    loaded++;
-                    if (loaded === fixedLayers.length) {
-                        this.ready = true;
-                        this.render();
-                    }
-                });
+                this.loadImage(layer.default_url)
+                    .then(() => {
+                        this.currentLayers[layer.code] = layer.default_url;
+                    })
+                    .catch(e => {
+                        console.warn('[Compositor] Fixed layer failed to load:', layer.code, e.message);
+                    })
+                    .finally(() => {
+                        loaded++;
+                        if (loaded === fixedLayers.length) {
+                            this.ready = true;
+                            this.render();
+                        }
+                    });
             });
         },
 
@@ -157,7 +165,8 @@ function visualCompositor(config) {
             }
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.crossOrigin = 'anonymous';
+                // crossOrigin retiré : le serveur media n'envoie pas forcément les headers CORS
+                // ce qui provoquait un échec de chargement complet (pas juste un canvas tainted)
                 img.onload  = () => { this.images[url] = img; resolve(img); };
                 img.onerror = () => reject(new Error('Failed: ' + url));
                 img.src = url;
@@ -187,10 +196,8 @@ function visualCompositor(config) {
         // Écoute la sélection de couleur or
         onGoldSelected(detail) {
             const { goldCode } = detail;
-            // Couches pilotées par gold_color (setting, clasp)
-            const goldLayers = (config.layers || []).filter(l =>
-                l.option_code === 'gold_color' || l.code === 'setting' || l.code === 'clasp'
-            );
+            // Seules les couches avec option_code === 'gold_color' (pas les couches option_code numérique)
+            const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
             if (!goldLayers.length) return;
 
             this.loading = true;
