@@ -46,6 +46,8 @@ if ($configJson === '{}') {
 </div>
 
 <script>
+// Guard: évite l'enregistrement double si 2 instances Alpine sont chargées
+if (typeof window.visualCompositor === 'undefined') {
 function visualCompositor(config) {
     return {
         config: config,
@@ -262,6 +264,8 @@ function visualCompositor(config) {
         }
     }
 }
+window.visualCompositor = visualCompositor;
+} // fin guard double-Alpine
 </script>
 
 <style>
