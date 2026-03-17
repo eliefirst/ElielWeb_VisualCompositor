@@ -37,7 +37,7 @@ if ($configJson === '{}') {
     <!-- Canvas overlay positionné sur la galerie -->
     <canvas x-ref="compositorCanvas"
             class="compositor-canvas"
-            :class="{ 'compositor-ready': ready, 'compositor-loading': !ready }"
+            :class="{ 'compositor-visible': visible }"
             aria-hidden="true">
     </canvas>
 
@@ -51,7 +51,8 @@ if ($configJson === '{}') {
 function visualCompositor(config) {
     return {
         config: config,
-        ready: false,
+        ready: false,      // couches fixes préchargées
+        visible: false,    // canvas affiché seulement après 1ère sélection
         loading: false,
         images: {},           // cache images chargées { url: HTMLImageElement }
         currentLayers: {},    // { layerCode: url }
@@ -186,6 +187,7 @@ function visualCompositor(config) {
             const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
             if (!url) return;
 
+            this.visible = true;
             this.loading = true;
             this.loadImage(url).then(() => {
                 this.currentLayers[layer.code] = url;
@@ -196,12 +198,19 @@ function visualCompositor(config) {
 
         // Écoute la sélection de couleur or
         onGoldSelected(detail) {
-            const { goldCode } = detail;
-            console.log('[Compositor] compositor-gold-selected:', { goldCode });
+            // Accepte plusieurs formats : { goldCode }, { code }, { value }
+            const goldCode = detail.goldCode || detail.code || detail.value || detail.goldType;
+            console.log('[Compositor] compositor-gold-selected raw detail:', JSON.stringify(detail));
+            console.log('[Compositor] compositor-gold-selected goldCode:', goldCode);
+            if (!goldCode) return;
             // Seules les couches avec option_code === 'gold_color' (pas les couches option_code numérique)
             const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
-            if (!goldLayers.length) return;
+            if (!goldLayers.length) {
+                console.warn('[Compositor] Aucune couche gold_color trouvée dans config.layers');
+                return;
+            }
 
+            this.visible = true;
             this.loading = true;
             let pending = goldLayers.length;
             goldLayers.forEach(layer => {
@@ -222,9 +231,11 @@ function visualCompositor(config) {
             const h = this.canvas.height;
             this.ctx.clearRect(0, 0, w, h);
 
-            // Fond blanc opaque pour masquer la photo galerie en dessous du canvas
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.fillRect(0, 0, w, h);
+            // Fond blanc opaque seulement quand l'utilisateur a fait une sélection
+            if (this.visible) {
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.fillRect(0, 0, w, h);
+            }
 
             const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
@@ -265,7 +276,8 @@ function visualCompositor(config) {
     transition: opacity 0.3s ease;
 }
 
-.compositor-canvas.compositor-ready {
+/* Visible seulement après 1ère sélection utilisateur */
+.compositor-canvas.compositor-visible {
     opacity: 1;
 }
 
