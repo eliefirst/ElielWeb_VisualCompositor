@@ -3,7 +3,7 @@
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <body>
         <referenceContainer name="content">
-            <block class="Magento\Catalog\Block\Product\View"
+            <block class="Magento\Framework\View\Element\Template"
                    name="product.visual.compositor"
                    template="ElielWeb_VisualCompositor::product/compositor.phtml"
                    after="-">
