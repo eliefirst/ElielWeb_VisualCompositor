@@ -62,7 +62,13 @@ function visualCompositor(config) {
         resizeObserver: null,
 
         init() {
-            if (!config || !config.enabled) return;
+            if (!config || !config.enabled) {
+                console.warn('[Compositor] DÉSACTIVÉ — config:', config);
+                return;
+            }
+            console.log('[Compositor] INIT — couches:', JSON.stringify(
+                (config.layers || []).map(l => ({ code: l.code, type: l.type, option_code: l.option_code, mappings_keys: Object.keys(l.mappings || {}) }))
+            ));
             this.$nextTick(() => {
                 this.canvas = this.$refs.compositorCanvas;
                 this.ctx    = this.canvas.getContext('2d');
@@ -74,6 +80,12 @@ function visualCompositor(config) {
                 this._onGoldSelected   = (e) => this.onGoldSelected(e.detail);
                 window.addEventListener('option-selected', this._onOptionSelected);
                 window.addEventListener('compositor-gold-selected', this._onGoldSelected);
+
+                // DEBUG : log TOUS les événements option-selected bruts
+                window.addEventListener('option-selected', (e) => {
+                    const codes = (config.layers || []).map(l => l.option_code);
+                    console.log('[Compositor] option-selected brut:', JSON.stringify(e.detail), '| option_codes config:', codes);
+                });
             });
         },
 
@@ -239,6 +251,8 @@ function visualCompositor(config) {
 
             // Ne rien dessiner tant que l'utilisateur n'a pas fait de sélection
             if (!this.visible) return;
+
+            console.log('[Compositor] render() currentLayers:', JSON.stringify(this.currentLayers));
 
             // Fond blanc opaque pour masquer la photo galerie en dessous du canvas
             this.ctx.fillStyle = '#ffffff';
