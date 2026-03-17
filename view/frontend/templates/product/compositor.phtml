@@ -10,11 +10,18 @@
 $product = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
 
+/* DEBUG - à supprimer après validation */
+echo '<!-- COMPOSITOR_DEBUG: vm=' . ($compositorViewModel ? 'ok' : 'NULL') . ' -->';
+
 if (!$compositorViewModel) {
     return;
 }
 
 $configJson = $compositorViewModel->getConfigJson($product);
+
+/* DEBUG - à supprimer après validation */
+echo '<!-- COMPOSITOR_DEBUG: configJson=' . htmlspecialchars(substr($configJson, 0, 80)) . ' -->';
+
 if ($configJson === '{}') {
     return;
 }
