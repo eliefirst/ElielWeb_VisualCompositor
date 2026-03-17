@@ -176,6 +176,7 @@ function visualCompositor(config) {
         // Écoute les sélections d'options (couleur fil, etc.)
         onOptionSelected(detail) {
             const { optionId, valueId, price } = detail;
+            console.log('[Compositor] option-selected:', { optionId, valueId });
             // Trouver la couche correspondant à cet optionId
             const layer = (config.layers || []).find(l => {
                 return l.option_code && l.option_code == optionId;
@@ -196,6 +197,7 @@ function visualCompositor(config) {
         // Écoute la sélection de couleur or
         onGoldSelected(detail) {
             const { goldCode } = detail;
+            console.log('[Compositor] compositor-gold-selected:', { goldCode });
             // Seules les couches avec option_code === 'gold_color' (pas les couches option_code numérique)
             const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
             if (!goldLayers.length) return;
@@ -219,6 +221,10 @@ function visualCompositor(config) {
             const w = this.canvas.width;
             const h = this.canvas.height;
             this.ctx.clearRect(0, 0, w, h);
+
+            // Fond blanc opaque pour masquer la photo galerie en dessous du canvas
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(0, 0, w, h);
 
             const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
