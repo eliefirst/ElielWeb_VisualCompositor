@@ -4,6 +4,7 @@ namespace ElielWeb\VisualCompositor\ViewModel;
 
 use ElielWeb\VisualCompositor\Service\CompositionService;
 use Magento\Catalog\Api\Data\ProductInterface;
+use Magento\Framework\Registry;
 use Magento\Framework\View\Element\Block\ArgumentInterface;
 use Magento\Store\Model\StoreManagerInterface;
 
@@ -11,8 +12,17 @@ class ProductCompositor implements ArgumentInterface
 {
     public function __construct(
         private readonly CompositionService   $compositionService,
-        private readonly StoreManagerInterface $storeManager
+        private readonly StoreManagerInterface $storeManager,
+        private readonly Registry             $registry
     ) {}
+
+    /**
+     * Retourne le produit courant depuis le registre Magento
+     */
+    public function getCurrentProduct(): ?ProductInterface
+    {
+        return $this->registry->registry('current_product');
+    }
 
     /**
      * Vérifie si le compositor est actif pour ce produit
