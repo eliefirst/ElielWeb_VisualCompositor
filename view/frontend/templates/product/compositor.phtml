@@ -259,6 +259,19 @@ function visualCompositor(config) {
             });
             if (!urlsToLoad.length) return;
 
+            // Collecte aussi les couches gold_color non encore définies, pour les afficher avec le fil
+            const goldCode = (config.defaultValues || {})['gold_color'];
+            if (goldCode) {
+                const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color' && !this.currentLayers[l.code]);
+                goldLayers.forEach(layer => {
+                    const url = layer.mappings[goldCode];
+                    if (url) {
+                        console.log('[Compositor] auto-apply gold_color:', layer.code, '→', goldCode);
+                        urlsToLoad.push({ layer, url });
+                    }
+                });
+            }
+
             this.visible = true;
             this.loading = true;
             let pending = urlsToLoad.length;

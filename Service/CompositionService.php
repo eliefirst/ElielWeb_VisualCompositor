@@ -140,12 +140,25 @@ class CompositionService
                 // Détecte la valeur par défaut depuis l'attribut produit (option_code non-numérique)
                 $optionCode = $layer->getOptionCode();
                 if ($optionCode && !is_numeric($optionCode) && !isset($defaultValues[$optionCode])) {
+                    // getAttributeText() retourne la valeur texte (ex: "Or Blanc"), jamais un ID numérique
                     $attrText = $product->getAttributeText($optionCode);
-                    if (!$attrText) {
-                        $attrText = $product->getData($optionCode);
-                    }
-                    if ($attrText) {
+                    if ($attrText && is_string($attrText)) {
+                        $defaultValues[$optionCode] = $attrText;
+                    } elseif ($attrText && is_object($attrText) && method_exists($attrText, '__toString')) {
+                        // Magento\Framework\Phrase ou similaire
                         $defaultValues[$optionCode] = (string)$attrText;
+                    } else {
+                        // Fallback : passer par le source model pour convertir l'ID en label
+                        $optionId = $product->getData($optionCode);
+                        if ($optionId) {
+                            $attribute = $product->getResource()->getAttribute($optionCode);
+                            if ($attribute && $attribute->usesSource()) {
+                                $label = $attribute->getSource()->getOptionText($optionId);
+                                if ($label) {
+                                    $defaultValues[$optionCode] = is_string($label) ? $label : (string)$label;
+                                }
+                            }
+                        }
                     }
                 }
             }
