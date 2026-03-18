@@ -205,21 +205,42 @@ function visualCompositor(config) {
         // (ex: gold_color → "Or Blanc"). Le canvas reste invisible jusqu'à la 1ère sélection utilisateur.
         preloadDefaultOptionLayers() {
             const defaults = config.defaultValues || {};
-            if (!Object.keys(defaults).length) return;
+            if (!Object.keys(defaults).length) {
+                console.log('[Compositor] preloadDefaultOptionLayers: pas de defaultValues dans config');
+                return;
+            }
+            console.log('[Compositor] preloadDefaultOptionLayers: defaultValues=', JSON.stringify(defaults));
 
+            const toLoad = [];
             (config.layers || []).forEach(layer => {
                 if (layer.type !== 'option' || !layer.option_code) return;
                 const defaultVal = defaults[layer.option_code];
                 if (!defaultVal) return;
                 const url = layer.mappings[defaultVal];
                 if (!url) return;
-                // Pré-cache l'image et enregistre dans currentLayers sans rendre visible
+                toLoad.push({ layer, url });
+            });
+
+            if (!toLoad.length) {
+                console.warn('[Compositor] preloadDefaultOptionLayers: aucun mapping trouvé pour', defaults);
+                return;
+            }
+
+            let pending = toLoad.length;
+            toLoad.forEach(({ layer, url }) => {
                 this.loadImage(url).then(() => {
-                    // N'écraser que si l'utilisateur n'a pas déjà fait une sélection pour ce layer
+                    // N'écraser que si l'utilisateur n'a pas déjà fait une sélection explicite
                     if (!this.currentLayers[layer.code]) {
                         this.currentLayers[layer.code] = url;
+                        console.log('[Compositor] default pré-chargé:', layer.code, '→', url);
                     }
-                }).catch(() => {});
+                }).catch(() => {}).finally(() => {
+                    pending--;
+                    // Si le canvas est déjà visible (fil déjà sélectionné), re-rendre pour inclure setting/clasp
+                    if (!pending && this.visible) {
+                        this.render();
+                    }
+                });
             });
         },
 
