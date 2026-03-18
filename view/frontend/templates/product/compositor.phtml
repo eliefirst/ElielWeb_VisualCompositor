@@ -82,6 +82,7 @@ function visualCompositor(config) {
                 this.ctx    = this.canvas.getContext('2d');
                 this.mountOnGallery();
                 this.preloadFixedLayers();
+                this.preloadDefaultOptionLayers();
 
                 // Vanilla JS listeners pour éviter le SyntaxError Alpine sur noms avec tirets
                 this._onOptionSelected = (e) => this.onOptionSelected(e.detail);
@@ -197,6 +198,28 @@ function visualCompositor(config) {
                 img.onload  = () => { this.images[url] = img; resolve(img); };
                 img.onerror = () => reject(new Error('Failed: ' + url));
                 img.src = url;
+            });
+        },
+
+        // Pré-charge les layers option dont la valeur par défaut est connue via l'attribut produit
+        // (ex: gold_color → "Or Blanc"). Le canvas reste invisible jusqu'à la 1ère sélection utilisateur.
+        preloadDefaultOptionLayers() {
+            const defaults = config.defaultValues || {};
+            if (!Object.keys(defaults).length) return;
+
+            (config.layers || []).forEach(layer => {
+                if (layer.type !== 'option' || !layer.option_code) return;
+                const defaultVal = defaults[layer.option_code];
+                if (!defaultVal) return;
+                const url = layer.mappings[defaultVal];
+                if (!url) return;
+                // Pré-cache l'image et enregistre dans currentLayers sans rendre visible
+                this.loadImage(url).then(() => {
+                    // N'écraser que si l'utilisateur n'a pas déjà fait une sélection pour ce layer
+                    if (!this.currentLayers[layer.code]) {
+                        this.currentLayers[layer.code] = url;
+                    }
+                }).catch(() => {});
             });
         },
 
