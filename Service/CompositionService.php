@@ -105,6 +105,9 @@ class CompositionService
             'layers'     => []
         ];
 
+        // Collecte des valeurs par défaut des attributs produit (ex: gold_color → "Or Blanc")
+        $defaultValues = [];
+
         foreach ($layers as $layer) {
             $layerData = [
                 'id'          => $layer->getLayerId(),
@@ -133,9 +136,25 @@ class CompositionService
                 foreach ($productMappings as $mapping) {
                     $layerData['mappings'][$mapping->getOptionValue()] = $mapping->getPngFile();
                 }
+
+                // Détecte la valeur par défaut depuis l'attribut produit (option_code non-numérique)
+                $optionCode = $layer->getOptionCode();
+                if ($optionCode && !is_numeric($optionCode) && !isset($defaultValues[$optionCode])) {
+                    $attrText = $product->getAttributeText($optionCode);
+                    if (!$attrText) {
+                        $attrText = $product->getData($optionCode);
+                    }
+                    if ($attrText) {
+                        $defaultValues[$optionCode] = (string)$attrText;
+                    }
+                }
             }
 
             $config['layers'][] = $layerData;
+        }
+
+        if (!empty($defaultValues)) {
+            $config['defaultValues'] = $defaultValues;
         }
 
         return $config;
