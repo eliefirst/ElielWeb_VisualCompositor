@@ -204,22 +204,28 @@ function visualCompositor(config) {
         onOptionSelected(detail) {
             const { optionId, valueId, price } = detail;
             console.log('[Compositor] option-selected:', { optionId, valueId });
-            // Trouver la couche correspondant à cet optionId
-            const layer = (config.layers || []).find(l => {
-                return l.option_code && l.option_code == optionId;
-            });
-            if (!layer) return;
+            // Trouver TOUTES les couches correspondant à cet optionId (ex: setting + clasp partagent le même option_code)
+            const layers = (config.layers || []).filter(l => l.option_code && l.option_code == optionId);
+            if (!layers.length) return;
 
-            const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
-            if (!url) return;
+            const urlsToLoad = [];
+            layers.forEach(layer => {
+                const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
+                if (url) urlsToLoad.push({ layer, url });
+            });
+            if (!urlsToLoad.length) return;
 
             this.visible = true;
             this.loading = true;
-            this.loadImage(url).then(() => {
-                this.currentLayers[layer.code] = url;
-                this.render();
-                this.loading = false;
-            }).catch(() => { this.loading = false; });
+            let pending = urlsToLoad.length;
+            urlsToLoad.forEach(({ layer, url }) => {
+                this.loadImage(url).then(() => {
+                    this.currentLayers[layer.code] = url;
+                }).catch(() => {}).finally(() => {
+                    pending--;
+                    if (!pending) { this.render(); this.loading = false; }
+                });
+            });
         },
 
         // Écoute la sélection de couleur or
@@ -272,7 +278,19 @@ function visualCompositor(config) {
                 const url = this.currentLayers[layer.code];
                 if (!url || !this.images[url]) return;
                 try {
-                    this.ctx.drawImage(this.images[url], 0, 0, w, h);
+                    const img = this.images[url];
+                    // Dessiner en mode "contain" : respecte le ratio de l'image, centré dans le canvas
+                    const imgRatio = img.naturalWidth / img.naturalHeight;
+                    const canvasRatio = w / h;
+                    let dw, dh, dx, dy;
+                    if (imgRatio > canvasRatio) {
+                        dw = w; dh = w / imgRatio;
+                        dx = 0; dy = (h - dh) / 2;
+                    } else {
+                        dh = h; dw = h * imgRatio;
+                        dx = (w - dw) / 2; dy = 0;
+                    }
+                    this.ctx.drawImage(img, dx, dy, dw, dh);
                 } catch(e) {
                     console.warn('Compositor render error:', layer.code, e);
                 }
