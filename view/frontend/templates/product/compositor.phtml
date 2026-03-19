@@ -204,7 +204,7 @@ function visualCompositor(config) {
         },
 
         // Pré-charge les layers option dont la valeur par défaut est connue via l'attribut produit
-        // (ex: gold_color → "Or Blanc"). Le canvas reste invisible jusqu'à la 1ère sélection utilisateur.
+        // (ex: gold_color → "Or Blanc"). Affiche le canvas dès que tous les défauts sont chargés.
         preloadDefaultOptionLayers() {
             const defaults = config.defaultValues || {};
             if (!Object.keys(defaults).length) {
@@ -238,8 +238,9 @@ function visualCompositor(config) {
                     }
                 }).catch(() => {}).finally(() => {
                     pending--;
-                    // Si le canvas est déjà visible (fil déjà sélectionné), re-rendre pour inclure setting/clasp
-                    if (!pending && this.visible) {
+                    if (!pending) {
+                        // Rendre dès que tous les défauts sont chargés, visible ou pas
+                        this.visible = true;
                         this.render();
                     }
                 });
