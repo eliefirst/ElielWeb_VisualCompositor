@@ -226,43 +226,7 @@ class CompositionService
             }
         }
 
-        // Priorité 1 : Imagick (supporte WebP avec transparence nativement)
-        if (class_exists('Imagick')) {
-            try {
-                $imagick = new \Imagick($absPath);
-                $iw = $imagick->getImageWidth();
-                $ih = $imagick->getImageHeight();
-
-                // trimImage retire les bordures uniformes/transparentes
-                $clone = clone $imagick;
-                $clone->trimImage(0);
-                $clone->resetImagePage('');
-                $page = $clone->getImagePage();
-                $geo  = $clone->getImageGeometry();
-                $clone->destroy();
-                $imagick->destroy();
-
-                if ($geo['width'] <= 0 || $geo['height'] <= 0) {
-                    return null;
-                }
-
-                $bounds = [
-                    'x'  => max(0, $page['x']),
-                    'y'  => max(0, $page['y']),
-                    'w'  => $geo['width'],
-                    'h'  => $geo['height'],
-                    'iw' => $iw,
-                    'ih' => $ih,
-                ];
-                @file_put_contents($cacheFile, json_encode($bounds));
-                return $bounds;
-
-            } catch (\Exception $e) {
-                // fallthrough vers GD
-            }
-        }
-
-        // Priorité 2 : GD (PNG uniquement — WebP nécessite compilation avec --with-webp)
+        // GD : scan pixel par pixel pour détecter la zone non-transparente
         if (!function_exists('imagecreatefromstring')) {
             return null;
         }
