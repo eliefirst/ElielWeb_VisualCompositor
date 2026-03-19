@@ -1,21 +1,10 @@
 <?php
-/**
- * ElielWeb VisualCompositor - Canvas overlay mobile first
- */
-
 $product             = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
-
-if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) {
-    return;
-}
-
+if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) { return; }
 $configJson = $compositorViewModel->getConfigJson($product);
-if ($configJson === '{}') {
-    return;
-}
+if ($configJson === '{}') { return; }
 ?>
-
 <script>
 (function() {
     function initVisualCompositor(config) {
@@ -25,9 +14,8 @@ if ($configJson === '{}') {
         const current = {};
         let canvas    = null;
         let ctx       = null;
-        let galleryEl = null;
+        let imgEl     = null;
         let observer  = null;
-        let ready     = false;
 
         function loadImage(url) {
             if (images[url]) return Promise.resolve(images[url]);
@@ -41,88 +29,62 @@ if ($configJson === '{}') {
         }
 
         function fitCanvas() {
-            if (!galleryEl || !canvas) return;
-            // Utiliser l'image principale comme référence de taille
-            const mainImg = galleryEl.querySelector('img');
-            if (mainImg && mainImg.offsetWidth > 0) {
-                const rect = mainImg.getBoundingClientRect();
-                const parentRect = galleryEl.getBoundingClientRect();
-                canvas.width  = Math.round(rect.width);
-                canvas.height = Math.round(rect.height);
-                canvas.style.width  = Math.round(rect.width) + 'px';
-                canvas.style.height = Math.round(rect.height) + 'px';
-                canvas.style.top  = Math.round(rect.top - parentRect.top) + 'px';
-                canvas.style.left = Math.round(rect.left - parentRect.left) + 'px';
-            } else {
-                const w = galleryEl.offsetWidth;
-                const h = galleryEl.offsetHeight;
-                canvas.width  = w;
-                canvas.height = h;
-                canvas.style.width  = w + 'px';
-                canvas.style.height = h + 'px';
-                canvas.style.top  = '0';
-                canvas.style.left = '0';
-            }
+            if (!imgEl || !canvas) return;
+            const w = imgEl.offsetWidth;
+            const h = imgEl.offsetHeight;
+            if (!w || !h) return;
+            canvas.width        = w;
+            canvas.height       = h;
+            canvas.style.width  = w + 'px';
+            canvas.style.height = h + 'px';
         }
 
         function render() {
-            if (!ctx || !canvas) return;
-            const w = canvas.width;
-            const h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
+            if (!ctx || !canvas || !canvas.width) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             const sorted = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
             sorted.forEach(layer => {
                 const url = current[layer.code];
                 if (url && images[url]) {
-                    try { ctx.drawImage(images[url], 0, 0, w, h); } catch(e) {}
+                    try { ctx.drawImage(images[url], 0, 0, canvas.width, canvas.height); } catch(e) {}
                 }
             });
         }
 
-        function preloadFixed() {
-            const fixed = (config.layers || []).filter(l => l.type === 'fixed' && l.default_url);
-            if (!fixed.length) { ready = true; return; }
-            let n = 0;
-            fixed.forEach(layer => {
-                loadImage(layer.default_url).then(() => {
-                    current[layer.code] = layer.default_url;
-                    n++;
-                    if (n === fixed.length) { ready = true; render(); }
-                });
-            });
-        }
-
         function mount() {
-            // Cibler #gallery-main uniquement (pas les thumbnails)
-            galleryEl = document.getElementById('gallery-main');
-            if (!galleryEl) {
-                galleryEl = document.querySelector('.product.media .relative');
-            }
-            if (!galleryEl) return;
+            const galleryMain = document.getElementById('gallery-main');
+            if (!galleryMain) return;
+
+            // Trouver l'image principale visible (pas les thumbnails)
+            imgEl = galleryMain.querySelector('img');
+            if (!imgEl) return;
+
+            // Canvas positionné exactement sur l'image
+            const wrapper = imgEl.parentElement;
+            wrapper.style.position = 'relative';
 
             canvas = document.createElement('canvas');
-            canvas.style.cssText = 'position:absolute;pointer-events:none;z-index:10;';
-            galleryEl.style.position = 'relative';
-            galleryEl.appendChild(canvas);
+            canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:10;';
+            wrapper.appendChild(canvas);
             ctx = canvas.getContext('2d');
 
-            // Attendre que l'image soit chargée pour avoir les bonnes dimensions
-            const mainImg = galleryEl.querySelector('img');
-            if (mainImg && mainImg.complete) {
-                fitCanvas();
-                preloadFixed();
-            } else if (mainImg) {
-                mainImg.addEventListener('load', () => { fitCanvas(); preloadFixed(); });
-            } else {
-                fitCanvas();
-                preloadFixed();
-            }
+            fitCanvas();
 
-            observer = new ResizeObserver(() => { fitCanvas(); if (ready) render(); });
-            observer.observe(galleryEl);
+            // ResizeObserver sur l'image elle-même
+            observer = new ResizeObserver(() => {
+                fitCanvas();
+                render();
+            });
+            observer.observe(imgEl);
+
+            // Attendre image chargée
+            if (imgEl.complete && imgEl.naturalWidth) {
+                fitCanvas();
+            } else {
+                imgEl.addEventListener('load', fitCanvas);
+            }
         }
 
-        // Écoute sélection couleur fil
         window.addEventListener('option-selected', function(e) {
             const { optionId, valueId } = e.detail || {};
             const layer = (config.layers || []).find(l => l.option_code == optionId);
@@ -132,11 +94,9 @@ if ($configJson === '{}') {
             loadImage(url).then(() => { current[layer.code] = url; render(); });
         });
 
-        // Écoute sélection couleur or
         window.addEventListener('compositor-gold-selected', function(e) {
             const { goldText } = e.detail || {};
-            const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
-            goldLayers.forEach(layer => {
+            (config.layers || []).filter(l => l.option_code === 'gold_color').forEach(layer => {
                 const url = layer.mappings[goldText];
                 if (!url) return;
                 loadImage(url).then(() => { current[layer.code] = url; render(); });
@@ -144,9 +104,9 @@ if ($configJson === '{}') {
         });
 
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => setTimeout(mount, 300));
+            document.addEventListener('DOMContentLoaded', () => setTimeout(mount, 500));
         } else {
-            setTimeout(mount, 300);
+            setTimeout(mount, 500);
         }
     }
 
