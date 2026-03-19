@@ -6,7 +6,9 @@ use ElielWeb\VisualCompositor\Model\ResourceModel\Family\CollectionFactory as Fa
 use ElielWeb\VisualCompositor\Model\ResourceModel\Layer\CollectionFactory as LayerCollectionFactory;
 use ElielWeb\VisualCompositor\Model\ResourceModel\Mapping\CollectionFactory as MappingCollectionFactory;
 use Magento\Catalog\Api\Data\ProductInterface;
+use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\Filesystem;
 
 class CompositionService
 {
@@ -14,7 +16,8 @@ class CompositionService
         private readonly FamilyCollectionFactory  $familyCollectionFactory,
         private readonly LayerCollectionFactory   $layerCollectionFactory,
         private readonly MappingCollectionFactory $mappingCollectionFactory,
-        private readonly ResourceConnection       $resourceConnection
+        private readonly ResourceConnection       $resourceConnection,
+        private readonly Filesystem               $filesystem
     ) {}
 
     /**
@@ -170,6 +173,94 @@ class CompositionService
             $config['defaultValues'] = $defaultValues;
         }
 
+        // Calcul des bornes de contenu (trim transparence) pour chaque PNG mappé
+        $fileBounds = [];
+        $mediaDir   = $this->filesystem->getDirectoryRead(DirectoryList::MEDIA);
+        foreach ($config['layers'] as $layer) {
+            foreach ($layer['mappings'] as $file) {
+                if (!isset($fileBounds[$file])) {
+                    $absPath = $mediaDir->getAbsolutePath('compositor/' . $file);
+                    $bounds  = $this->computePngBounds($absPath);
+                    if ($bounds !== null) {
+                        $fileBounds[$file] = $bounds;
+                    }
+                }
+            }
+        }
+        if (!empty($fileBounds)) {
+            $config['file_bounds'] = $fileBounds;
+        }
+
         return $config;
+    }
+
+    /**
+     * Calcule la boîte englobante des pixels non-transparents d'un PNG.
+     * Met en cache le résultat dans un fichier sidecar .bounds.json.
+     *
+     * @return array{x:int,y:int,w:int,h:int,iw:int,ih:int}|null
+     */
+    private function computePngBounds(string $absPath): ?array
+    {
+        if (!file_exists($absPath)) {
+            return null;
+        }
+
+        // Sidecar cache : évite de re-scanner à chaque page load
+        $cacheFile = $absPath . '.bounds.json';
+        if (file_exists($cacheFile) && filemtime($cacheFile) >= filemtime($absPath)) {
+            $cached = json_decode((string)file_get_contents($cacheFile), true);
+            if (is_array($cached) && isset($cached['iw'])) {
+                return $cached;
+            }
+        }
+
+        if (!function_exists('imagecreatefrompng')) {
+            return null;
+        }
+
+        $img = @imagecreatefrompng($absPath);
+        if (!$img) {
+            return null;
+        }
+
+        $iw   = imagesx($img);
+        $ih   = imagesy($img);
+        $minX = $iw;
+        $minY = $ih;
+        $maxX = -1;
+        $maxY = -1;
+
+        // GD alpha : 0 = opaque, 127 = fully transparent ; seuil < 64 ≈ ≥ 50% opaque
+        for ($y = 0; $y < $ih; $y++) {
+            for ($x = 0; $x < $iw; $x++) {
+                $alpha = (imagecolorat($img, $x, $y) >> 24) & 0x7F;
+                if ($alpha < 64) {
+                    if ($x < $minX) $minX = $x;
+                    if ($x > $maxX) $maxX = $x;
+                    if ($y < $minY) $minY = $y;
+                    if ($y > $maxY) $maxY = $y;
+                }
+            }
+        }
+
+        imagedestroy($img);
+
+        if ($maxX < 0) {
+            return null; // image entièrement transparente
+        }
+
+        $bounds = [
+            'x'  => $minX,
+            'y'  => $minY,
+            'w'  => $maxX - $minX + 1,
+            'h'  => $maxY - $minY + 1,
+            'iw' => $iw,
+            'ih' => $ih,
+        ];
+
+        @file_put_contents($cacheFile, json_encode($bounds));
+
+        return $bounds;
     }
 }
