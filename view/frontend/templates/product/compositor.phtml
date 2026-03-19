@@ -21,13 +21,13 @@ if ($configJson === '{}') {
     function initVisualCompositor(config) {
         if (!config || !config.enabled) return;
 
-        const images    = {};
-        const current   = {};
-        let canvas      = null;
-        let ctx         = null;
-        let galleryEl   = null;
-        let observer    = null;
-        let ready       = false;
+        const images  = {};
+        const current = {};
+        let canvas    = null;
+        let ctx       = null;
+        let galleryEl = null;
+        let observer  = null;
+        let ready     = false;
 
         function loadImage(url) {
             if (images[url]) return Promise.resolve(images[url]);
@@ -42,13 +42,26 @@ if ($configJson === '{}') {
 
         function fitCanvas() {
             if (!galleryEl || !canvas) return;
-            const w = galleryEl.offsetWidth;
-            const h = galleryEl.offsetHeight;
-            if (w && h) {
+            // Utiliser l'image principale comme référence de taille
+            const mainImg = galleryEl.querySelector('img');
+            if (mainImg && mainImg.offsetWidth > 0) {
+                const rect = mainImg.getBoundingClientRect();
+                const parentRect = galleryEl.getBoundingClientRect();
+                canvas.width  = Math.round(rect.width);
+                canvas.height = Math.round(rect.height);
+                canvas.style.width  = Math.round(rect.width) + 'px';
+                canvas.style.height = Math.round(rect.height) + 'px';
+                canvas.style.top  = Math.round(rect.top - parentRect.top) + 'px';
+                canvas.style.left = Math.round(rect.left - parentRect.left) + 'px';
+            } else {
+                const w = galleryEl.offsetWidth;
+                const h = galleryEl.offsetHeight;
                 canvas.width  = w;
                 canvas.height = h;
                 canvas.style.width  = w + 'px';
                 canvas.style.height = h + 'px';
+                canvas.style.top  = '0';
+                canvas.style.left = '0';
             }
         }
 
@@ -57,7 +70,6 @@ if ($configJson === '{}') {
             const w = canvas.width;
             const h = canvas.height;
             ctx.clearRect(0, 0, w, h);
-
             const sorted = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
             sorted.forEach(layer => {
                 const url = current[layer.code];
@@ -81,28 +93,36 @@ if ($configJson === '{}') {
         }
 
         function mount() {
-            // Cibler #gallery-main (Hyvä)
+            // Cibler #gallery-main uniquement (pas les thumbnails)
             galleryEl = document.getElementById('gallery-main');
             if (!galleryEl) {
-                galleryEl = document.querySelector('.product.media, [data-gallery-role="gallery"]');
+                galleryEl = document.querySelector('.product.media .relative');
             }
             if (!galleryEl) return;
 
             canvas = document.createElement('canvas');
-            canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;';
+            canvas.style.cssText = 'position:absolute;pointer-events:none;z-index:10;';
             galleryEl.style.position = 'relative';
             galleryEl.appendChild(canvas);
             ctx = canvas.getContext('2d');
 
-            fitCanvas();
+            // Attendre que l'image soit chargée pour avoir les bonnes dimensions
+            const mainImg = galleryEl.querySelector('img');
+            if (mainImg && mainImg.complete) {
+                fitCanvas();
+                preloadFixed();
+            } else if (mainImg) {
+                mainImg.addEventListener('load', () => { fitCanvas(); preloadFixed(); });
+            } else {
+                fitCanvas();
+                preloadFixed();
+            }
 
             observer = new ResizeObserver(() => { fitCanvas(); if (ready) render(); });
             observer.observe(galleryEl);
-
-            preloadFixed();
         }
 
-        // Écoute sélection couleur fil (option_type_id)
+        // Écoute sélection couleur fil
         window.addEventListener('option-selected', function(e) {
             const { optionId, valueId } = e.detail || {};
             const layer = (config.layers || []).find(l => l.option_code == optionId);
@@ -123,11 +143,9 @@ if ($configJson === '{}') {
             });
         });
 
-        // Monter après chargement DOM
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', mount);
+            document.addEventListener('DOMContentLoaded', () => setTimeout(mount, 300));
         } else {
-            // Attendre que la galerie Hyvä soit rendue (Alpine.js)
             setTimeout(mount, 300);
         }
     }
