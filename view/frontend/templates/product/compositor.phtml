@@ -78,6 +78,7 @@ function visualCompositor(config) {
             console.log('[Compositor] INIT — couches:', JSON.stringify(
                 (config.layers || []).map(l => ({ code: l.code, type: l.type, option_code: l.option_code, mappings_keys: Object.keys(l.mappings || {}) }))
             ));
+            console.log('[Compositor] INIT — bounds count:', Object.keys(config.bounds || {}).length, '| urls:', Object.keys(config.bounds || {}).map(u => u.split('/').pop()));
             this.$nextTick(() => {
                 this.canvas = this.$refs.compositorCanvas;
                 this.ctx    = this.canvas.getContext('2d');
@@ -359,7 +360,7 @@ function visualCompositor(config) {
                 uMaxNY = Math.min(1, uMaxNY + PADDING);
                 console.log('[Compositor] bounds union (normalized):', {uMinNX, uMinNY, uMaxNX, uMaxNY});
             } else {
-                console.warn('[Compositor] aucune bounds — config.bounds keys:', Object.keys(config.bounds || {}), '| imageBounds keys:', Object.keys(this.imageBounds));
+                console.log('[Compositor] aucune bounds — config.bounds keys:', Object.keys(config.bounds || {}), '| imageBounds keys:', Object.keys(this.imageBounds));
             }
 
             orderedLayers.forEach(layer => {
