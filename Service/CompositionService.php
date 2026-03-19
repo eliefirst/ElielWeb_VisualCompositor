@@ -173,29 +173,18 @@ class CompositionService
             $config['defaultValues'] = $defaultValues;
         }
 
-        // Calcul des bornes de contenu (trim transparence) pour chaque image (mappings + default_file)
+        // Calcul des bornes de contenu (trim transparence) pour chaque PNG mappé
         $fileBounds = [];
         $mediaDir   = $this->filesystem->getDirectoryRead(DirectoryList::MEDIA);
-
-        $collectBounds = function (string $file) use (&$fileBounds, $mediaDir): void {
-            if ($file === '' || isset($fileBounds[$file])) {
-                return;
-            }
-            $absPath = $mediaDir->getAbsolutePath('compositor/' . $file);
-            $bounds  = $this->computePngBounds($absPath);
-            if ($bounds !== null) {
-                $fileBounds[$file] = $bounds;
-            }
-        };
-
         foreach ($config['layers'] as $layer) {
-            // Couches fixes : default_file
-            if (!empty($layer['default_file'])) {
-                $collectBounds($layer['default_file']);
-            }
-            // Couches option : tous les mappings
             foreach ($layer['mappings'] as $file) {
-                $collectBounds($file);
+                if (!isset($fileBounds[$file])) {
+                    $absPath = $mediaDir->getAbsolutePath('compositor/' . $file);
+                    $bounds  = $this->computePngBounds($absPath);
+                    if ($bounds !== null) {
+                        $fileBounds[$file] = $bounds;
+                    }
+                }
             }
         }
         if (!empty($fileBounds)) {
@@ -226,17 +215,11 @@ class CompositionService
             }
         }
 
-        // GD : scan pixel par pixel pour détecter la zone non-transparente
-        if (!function_exists('imagecreatefromstring')) {
+        if (!function_exists('imagecreatefrompng')) {
             return null;
         }
 
-        $content = @file_get_contents($absPath);
-        if ($content === false) {
-            return null;
-        }
-
-        $img = @imagecreatefromstring($content);
+        $img = @imagecreatefrompng($absPath);
         if (!$img) {
             return null;
         }
@@ -264,7 +247,7 @@ class CompositionService
         imagedestroy($img);
 
         if ($maxX < 0) {
-            return null;
+            return null; // image entièrement transparente
         }
 
         $bounds = [

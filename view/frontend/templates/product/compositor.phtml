@@ -78,7 +78,6 @@ function visualCompositor(config) {
             console.log('[Compositor] INIT — couches:', JSON.stringify(
                 (config.layers || []).map(l => ({ code: l.code, type: l.type, option_code: l.option_code, mappings_keys: Object.keys(l.mappings || {}) }))
             ));
-            console.log('[Compositor] INIT — bounds count:', Object.keys(config.bounds || {}).length, '| urls:', Object.keys(config.bounds || {}).map(u => u.split('/').pop()));
             this.$nextTick(() => {
                 this.canvas = this.$refs.compositorCanvas;
                 this.ctx    = this.canvas.getContext('2d');
@@ -204,7 +203,7 @@ function visualCompositor(config) {
         },
 
         // Pré-charge les layers option dont la valeur par défaut est connue via l'attribut produit
-        // (ex: gold_color → "Or Blanc"). Affiche le canvas dès que tous les défauts sont chargés.
+        // (ex: gold_color → "Or Blanc"). Le canvas reste invisible jusqu'à la 1ère sélection utilisateur.
         preloadDefaultOptionLayers() {
             const defaults = config.defaultValues || {};
             if (!Object.keys(defaults).length) {
@@ -238,9 +237,8 @@ function visualCompositor(config) {
                     }
                 }).catch(() => {}).finally(() => {
                     pending--;
-                    if (!pending) {
-                        // Rendre dès que tous les défauts sont chargés, visible ou pas
-                        this.visible = true;
+                    // Si le canvas est déjà visible (fil déjà sélectionné), re-rendre pour inclure setting/clasp
+                    if (!pending && this.visible) {
                         this.render();
                     }
                 });
@@ -359,9 +357,6 @@ function visualCompositor(config) {
                 uMinNY = Math.max(0, uMinNY - PADDING);
                 uMaxNX = Math.min(1, uMaxNX + PADDING);
                 uMaxNY = Math.min(1, uMaxNY + PADDING);
-                console.log('[Compositor] bounds union (normalized):', {uMinNX, uMinNY, uMaxNX, uMaxNY});
-            } else {
-                console.log('[Compositor] aucune bounds — config.bounds keys:', Object.keys(config.bounds || {}), '| imageBounds keys:', Object.keys(this.imageBounds));
             }
 
             orderedLayers.forEach(layer => {
