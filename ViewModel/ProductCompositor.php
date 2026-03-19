@@ -54,7 +54,11 @@ class ProductCompositor implements ArgumentInterface
 
         foreach ($config['layers'] as &$layer) {
             if (!empty($layer['default_file'])) {
-                $layer['default_url'] = $mediaUrl . 'compositor/' . $layer['default_file'];
+                $url = $mediaUrl . 'compositor/' . $layer['default_file'];
+                $layer['default_url'] = $url;
+                if (isset($fileBounds[$layer['default_file']])) {
+                    $urlBounds[$url] = $fileBounds[$layer['default_file']];
+                }
             }
             foreach ($layer['mappings'] as $value => $file) {
                 $url = $mediaUrl . 'compositor/' . $file;
