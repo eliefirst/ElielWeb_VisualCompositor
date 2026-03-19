@@ -1,460 +1,137 @@
 <?php
 /**
  * ElielWeb VisualCompositor - Canvas overlay mobile first
- *
- * @var \Magento\Framework\View\Element\Template $block
- * @var \ElielWeb\VisualCompositor\ViewModel\ProductCompositor $compositorViewModel
- * @var \Magento\Catalog\Model\Product $product
  */
 
+$product             = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
 
-/* DEBUG - à supprimer après validation */
-echo '<!-- COMPOSITOR_DEBUG: vm=' . ($compositorViewModel ? 'ok' : 'NULL') . ' -->';
-
-if (!$compositorViewModel) {
-    return;
-}
-
-$product = $compositorViewModel->getCurrentProduct();
-
-/* DEBUG */
-echo '<!-- COMPOSITOR_DEBUG: product=' . ($product ? $product->getSku() : 'NULL') . ' -->';
-
-if (!$product) {
+if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) {
     return;
 }
 
 $configJson = $compositorViewModel->getConfigJson($product);
-
-/* DEBUG - à supprimer après validation */
-echo '<!-- COMPOSITOR_DEBUG: configJson=' . htmlspecialchars(substr($configJson, 0, 80)) . ' -->';
-
 if ($configJson === '{}') {
     return;
 }
 ?>
 
-<div id="visual-compositor-wrap"
-     class="visual-compositor-wrap"
-     x-data="visualCompositor(<?= $escaper->escapeHtmlAttr($configJson) ?>)"
-     x-init="init()">
-
-    <!-- Canvas overlay positionné sur la galerie -->
-    <canvas x-ref="compositorCanvas"
-            class="compositor-canvas"
-            :class="{ 'compositor-visible': visible }"
-            aria-hidden="true">
-    </canvas>
-
-    <!-- Loader mobile friendly -->
-    <div class="compositor-loader" x-show="loading" x-cloak>
-        <div class="compositor-spinner"></div>
-    </div>
-</div>
-
 <script>
-// Guard: évite l'enregistrement double si 2 instances Alpine sont chargées
-if (typeof window.visualCompositor === 'undefined') {
-function visualCompositor(config) {
-    return {
-        config: config,
-        ready: false,      // couches fixes préchargées
-        visible: false,    // canvas affiché seulement après 1ère sélection
-        loading: false,
-        images: {},           // cache images chargées { url: HTMLImageElement }
-        imageBounds: config.bounds || {}, // bornes contenu pré-calculées côté PHP { url: {x,y,w,h,iw,ih} }
-        currentLayers: {},    // { layerCode: url }
-        canvas: null,
-        ctx: null,
-        galleryEl: null,
-        resizeObserver: null,
+(function() {
+    function initVisualCompositor(config) {
+        if (!config || !config.enabled) return;
 
-        init() {
-            if (!config || !config.enabled) {
-                console.warn('[Compositor] DÉSACTIVÉ — config:', config);
-                return;
-            }
-            console.log('[Compositor] INIT — couches:', JSON.stringify(
-                (config.layers || []).map(l => ({ code: l.code, type: l.type, option_code: l.option_code, mappings_keys: Object.keys(l.mappings || {}) }))
-            ));
-            this.$nextTick(() => {
-                this.canvas = this.$refs.compositorCanvas;
-                this.ctx    = this.canvas.getContext('2d');
-                this.mountOnGallery();
-                this.preloadFixedLayers();
-                this.preloadDefaultOptionLayers();
+        const images    = {};
+        const current   = {};
+        let canvas      = null;
+        let ctx         = null;
+        let galleryEl   = null;
+        let observer    = null;
+        let ready       = false;
 
-                // Vanilla JS listeners pour éviter le SyntaxError Alpine sur noms avec tirets
-                this._onOptionSelected = (e) => this.onOptionSelected(e.detail);
-                this._onGoldSelected   = (e) => this.onGoldSelected(e.detail);
-                window.addEventListener('option-selected', this._onOptionSelected);
-                window.addEventListener('compositor-gold-selected', this._onGoldSelected);
-
-                // DEBUG : log TOUS les événements option-selected bruts
-                window.addEventListener('option-selected', (e) => {
-                    const codes = (config.layers || []).map(l => l.option_code);
-                    console.log('[Compositor] option-selected brut:', JSON.stringify(e.detail), '| option_codes config:', codes);
-                });
-            });
-        },
-
-        // Trouve la galerie Hyvä et positionne le canvas dessus
-        mountOnGallery(attempt = 0) {
-            // Sélecteurs Hyvä galerie (du plus précis au plus générique)
-            const selectors = [
-                '[data-gallery-role="gallery-placeholder"]',
-                '[data-gallery-role="gallery"]',
-                '.gallery-placeholder',
-                '[x-data*="initGallery"]',
-                '[x-data*="gallery"]',
-                '.product-media',
-                '.product.media',
-                'figure.product-item-photo',
-                '.fotorama',
-            ];
-
-            for (const sel of selectors) {
-                this.galleryEl = document.querySelector(sel);
-                if (this.galleryEl) break;
-            }
-
-            if (!this.galleryEl) {
-                // Fallback : chercher la première image produit
-                const img = document.querySelector('.catalog-product-view img');
-                if (img) this.galleryEl = img.closest('div') || img.parentElement;
-            }
-
-            // Retry si la galerie n'est pas encore montée par Alpine (jusqu'à 5 tentatives)
-            if (!this.galleryEl) {
-                if (attempt < 5) {
-                    setTimeout(() => this.mountOnGallery(attempt + 1), 300);
-                }
-                return;
-            }
-
-            // Positionner le canvas en overlay sur la galerie
-            const wrap = document.getElementById('visual-compositor-wrap');
-            if (wrap) {
-                this.galleryEl.style.position = 'relative';
-                this.galleryEl.appendChild(wrap);
-            }
-
-            this.fitCanvas();
-            // Re-rendu si les images fixes étaient déjà chargées avant que la galerie soit trouvée
-            if (this.ready) this.render();
-
-            // Responsive : resize observer mobile/desktop
-            this.resizeObserver = new ResizeObserver(() => {
-                this.fitCanvas();
-                if (this.ready) this.render();
-            });
-            this.resizeObserver.observe(this.galleryEl);
-        },
-
-        fitCanvas() {
-            if (!this.galleryEl || !this.canvas) return;
-            const rect = this.galleryEl.getBoundingClientRect();
-            const w = rect.width  || this.galleryEl.offsetWidth  || 600;
-            const h = rect.height || this.galleryEl.offsetHeight || 600;
-            this.canvas.width  = w;
-            this.canvas.height = h;
-            this.canvas.style.width  = w + 'px';
-            this.canvas.style.height = h + 'px';
-        },
-
-        // Précharge les couches fixes au chargement
-        preloadFixedLayers() {
-            const fixedLayers = (config.layers || []).filter(l => l.type === 'fixed' && l.default_url);
-            if (!fixedLayers.length) { this.ready = true; return; }
-
-            let loaded = 0;
-            fixedLayers.forEach(layer => {
-                this.loadImage(layer.default_url)
-                    .then(() => {
-                        this.currentLayers[layer.code] = layer.default_url;
-                    })
-                    .catch(e => {
-                        console.warn('[Compositor] Fixed layer failed to load:', layer.code, e.message);
-                    })
-                    .finally(() => {
-                        loaded++;
-                        if (loaded === fixedLayers.length) {
-                            this.ready = true;
-                            this.render();
-                        }
-                    });
-            });
-        },
-
-        // Charge une image avec cache
-        loadImage(url) {
-            if (this.images[url]) {
-                return Promise.resolve(this.images[url]);
-            }
+        function loadImage(url) {
+            if (images[url]) return Promise.resolve(images[url]);
             return new Promise((resolve, reject) => {
                 const img = new Image();
-                // crossOrigin retiré : le serveur media n'envoie pas forcément les headers CORS
-                // ce qui provoquait un échec de chargement complet (pas juste un canvas tainted)
-                img.onload  = () => { this.images[url] = img; resolve(img); };
+                img.crossOrigin = 'anonymous';
+                img.onload  = () => { images[url] = img; resolve(img); };
                 img.onerror = () => reject(new Error('Failed: ' + url));
                 img.src = url;
             });
-        },
+        }
 
-        // Pré-charge les layers option dont la valeur par défaut est connue via l'attribut produit
-        // (ex: gold_color → "Or Blanc"). Le canvas reste invisible jusqu'à la 1ère sélection utilisateur.
-        preloadDefaultOptionLayers() {
-            const defaults = config.defaultValues || {};
-            if (!Object.keys(defaults).length) {
-                console.log('[Compositor] preloadDefaultOptionLayers: pas de defaultValues dans config');
-                return;
+        function fitCanvas() {
+            if (!galleryEl || !canvas) return;
+            const w = galleryEl.offsetWidth;
+            const h = galleryEl.offsetHeight;
+            if (w && h) {
+                canvas.width  = w;
+                canvas.height = h;
+                canvas.style.width  = w + 'px';
+                canvas.style.height = h + 'px';
             }
-            console.log('[Compositor] preloadDefaultOptionLayers: defaultValues=', JSON.stringify(defaults));
+        }
 
-            const toLoad = [];
-            (config.layers || []).forEach(layer => {
-                if (layer.type !== 'option' || !layer.option_code) return;
-                const defaultVal = defaults[layer.option_code];
-                if (!defaultVal) return;
-                const url = layer.mappings[defaultVal];
-                if (!url) return;
-                toLoad.push({ layer, url });
-            });
+        function render() {
+            if (!ctx || !canvas) return;
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
 
-            if (!toLoad.length) {
-                console.warn('[Compositor] preloadDefaultOptionLayers: aucun mapping trouvé pour', defaults);
-                return;
-            }
-
-            let pending = toLoad.length;
-            toLoad.forEach(({ layer, url }) => {
-                this.loadImage(url).then(() => {
-                    // N'écraser que si l'utilisateur n'a pas déjà fait une sélection explicite
-                    if (!this.currentLayers[layer.code]) {
-                        this.currentLayers[layer.code] = url;
-                        console.log('[Compositor] default pré-chargé:', layer.code, '→', url);
-                    }
-                }).catch(() => {}).finally(() => {
-                    pending--;
-                    // Si le canvas est déjà visible (fil déjà sélectionné), re-rendre pour inclure setting/clasp
-                    if (!pending && this.visible) {
-                        this.render();
-                    }
-                });
-            });
-        },
-
-        // Écoute les sélections d'options (couleur fil, etc.)
-        onOptionSelected(detail) {
-            const { optionId, valueId, price } = detail;
-            console.log('[Compositor] option-selected:', { optionId, valueId });
-            // Trouver TOUTES les couches correspondant à cet optionId (ex: setting + clasp partagent le même option_code)
-            const layers = (config.layers || []).filter(l => l.option_code && l.option_code == optionId);
-            if (!layers.length) return;
-
-            const urlsToLoad = [];
-            layers.forEach(layer => {
-                const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
-                if (url) urlsToLoad.push({ layer, url });
-            });
-            if (!urlsToLoad.length) return;
-
-            // Collecte aussi les couches gold_color non encore définies, pour les afficher avec le fil
-            const goldCode = (config.defaultValues || {})['gold_color'];
-            if (goldCode) {
-                const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color' && !this.currentLayers[l.code]);
-                goldLayers.forEach(layer => {
-                    const url = layer.mappings[goldCode];
-                    if (url) {
-                        console.log('[Compositor] auto-apply gold_color:', layer.code, '→', goldCode);
-                        urlsToLoad.push({ layer, url });
-                    }
-                });
-            }
-
-            this.visible = true;
-            this.loading = true;
-            let pending = urlsToLoad.length;
-            urlsToLoad.forEach(({ layer, url }) => {
-                this.loadImage(url).then(() => {
-                    this.currentLayers[layer.code] = url;
-                }).catch(() => {}).finally(() => {
-                    pending--;
-                    if (!pending) { this.render(); this.loading = false; }
-                });
-            });
-        },
-
-        // Écoute la sélection de couleur or
-        onGoldSelected(detail) {
-            // Accepte plusieurs formats : { goldCode }, { code }, { value }
-            const goldCode = detail.goldCode || detail.code || detail.value || detail.goldType;
-            console.log('[Compositor] compositor-gold-selected raw detail:', JSON.stringify(detail));
-            console.log('[Compositor] compositor-gold-selected goldCode:', goldCode);
-            if (!goldCode) return;
-            // Seules les couches avec option_code === 'gold_color' (pas les couches option_code numérique)
-            const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
-            if (!goldLayers.length) {
-                console.warn('[Compositor] Aucune couche gold_color trouvée dans config.layers');
-                return;
-            }
-
-            this.visible = true;
-            this.loading = true;
-            let pending = goldLayers.length;
-            goldLayers.forEach(layer => {
-                const url = layer.mappings[goldCode];
-                if (!url) { pending--; if (!pending) { this.render(); this.loading = false; } return; }
-                this.loadImage(url).then(() => {
-                    this.currentLayers[layer.code] = url;
-                    pending--;
-                    if (!pending) { this.render(); this.loading = false; }
-                }).catch(() => { pending--; if (!pending) { this.render(); this.loading = false; } });
-            });
-        },
-
-        // Rendu canvas : superpose les couches dans l'ordre sort_order
-        render() {
-            if (!this.ctx || !this.canvas) return;
-            const w = this.canvas.width;
-            const h = this.canvas.height;
-            this.ctx.clearRect(0, 0, w, h);
-
-            // Ne rien dessiner tant que l'utilisateur n'a pas fait de sélection
-            if (!this.visible) return;
-
-            console.log('[Compositor] render() currentLayers:', JSON.stringify(this.currentLayers));
-
-            // Fond blanc opaque pour masquer la photo galerie en dessous du canvas
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.fillRect(0, 0, w, h);
-
-            const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-            // Calcul de la boîte englobante union de toutes les couches actives (coords normalisées 0-1)
-            // Permet de recadrer le canvas sur le bijou réel, comme la photo produit originale
-            let uMinNX = Infinity, uMinNY = Infinity, uMaxNX = -Infinity, uMaxNY = -Infinity;
-            let hasBounds = false;
-            orderedLayers.forEach(layer => {
-                const url = this.currentLayers[layer.code];
-                if (!url || !this.images[url]) return;
-                const b = this.imageBounds[url];
-                if (!b) return;
-                const nx1 = b.x / b.iw, ny1 = b.y / b.ih;
-                const nx2 = (b.x + b.w) / b.iw, ny2 = (b.y + b.h) / b.ih;
-                if (nx1 < uMinNX) uMinNX = nx1;
-                if (ny1 < uMinNY) uMinNY = ny1;
-                if (nx2 > uMaxNX) uMaxNX = nx2;
-                if (ny2 > uMaxNY) uMaxNY = ny2;
-                hasBounds = true;
-            });
-
-            // Légère marge autour du contenu pour ne pas rogner les bords anti-aliasés
-            const PADDING = 0.02;
-            if (hasBounds) {
-                uMinNX = Math.max(0, uMinNX - PADDING);
-                uMinNY = Math.max(0, uMinNY - PADDING);
-                uMaxNX = Math.min(1, uMaxNX + PADDING);
-                uMaxNY = Math.min(1, uMaxNY + PADDING);
-            }
-
-            orderedLayers.forEach(layer => {
-                const url = this.currentLayers[layer.code];
-                if (!url || !this.images[url]) return;
-                try {
-                    const img = this.images[url];
-                    let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
-
-                    if (hasBounds && this.imageBounds[url]) {
-                        // Source = zone de contenu réel (trim transparence)
-                        const iw = img.naturalWidth, ih = img.naturalHeight;
-                        sx = Math.round(uMinNX * iw);
-                        sy = Math.round(uMinNY * ih);
-                        sw = Math.round((uMaxNX - uMinNX) * iw);
-                        sh = Math.round((uMaxNY - uMinNY) * ih);
-                    }
-
-                    // Contain dans le canvas
-                    const srcRatio    = sw / sh;
-                    const canvasRatio = w / h;
-                    let dw, dh, dx, dy;
-                    if (srcRatio > canvasRatio) {
-                        dw = w; dh = w / srcRatio;
-                        dx = 0; dy = (h - dh) / 2;
-                    } else {
-                        dh = h; dw = h * srcRatio;
-                        dx = (w - dw) / 2; dy = 0;
-                    }
-                    this.ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-                } catch(e) {
-                    console.warn('Compositor render error:', layer.code, e);
+            const sorted = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+            sorted.forEach(layer => {
+                const url = current[layer.code];
+                if (url && images[url]) {
+                    try { ctx.drawImage(images[url], 0, 0, w, h); } catch(e) {}
                 }
             });
-        },
+        }
 
-        destroy() {
-            if (this.resizeObserver) this.resizeObserver.disconnect();
-            if (this._onOptionSelected) window.removeEventListener('option-selected', this._onOptionSelected);
-            if (this._onGoldSelected)   window.removeEventListener('compositor-gold-selected', this._onGoldSelected);
+        function preloadFixed() {
+            const fixed = (config.layers || []).filter(l => l.type === 'fixed' && l.default_url);
+            if (!fixed.length) { ready = true; return; }
+            let n = 0;
+            fixed.forEach(layer => {
+                loadImage(layer.default_url).then(() => {
+                    current[layer.code] = layer.default_url;
+                    n++;
+                    if (n === fixed.length) { ready = true; render(); }
+                });
+            });
+        }
+
+        function mount() {
+            // Cibler #gallery-main (Hyvä)
+            galleryEl = document.getElementById('gallery-main');
+            if (!galleryEl) {
+                galleryEl = document.querySelector('.product.media, [data-gallery-role="gallery"]');
+            }
+            if (!galleryEl) return;
+
+            canvas = document.createElement('canvas');
+            canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;';
+            galleryEl.style.position = 'relative';
+            galleryEl.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+
+            fitCanvas();
+
+            observer = new ResizeObserver(() => { fitCanvas(); if (ready) render(); });
+            observer.observe(galleryEl);
+
+            preloadFixed();
+        }
+
+        // Écoute sélection couleur fil (option_type_id)
+        window.addEventListener('option-selected', function(e) {
+            const { optionId, valueId } = e.detail || {};
+            const layer = (config.layers || []).find(l => l.option_code == optionId);
+            if (!layer) return;
+            const url = layer.mappings[valueId] || layer.mappings[String(valueId)];
+            if (!url) return;
+            loadImage(url).then(() => { current[layer.code] = url; render(); });
+        });
+
+        // Écoute sélection couleur or
+        window.addEventListener('compositor-gold-selected', function(e) {
+            const { goldText } = e.detail || {};
+            const goldLayers = (config.layers || []).filter(l => l.option_code === 'gold_color');
+            goldLayers.forEach(layer => {
+                const url = layer.mappings[goldText];
+                if (!url) return;
+                loadImage(url).then(() => { current[layer.code] = url; render(); });
+            });
+        });
+
+        // Monter après chargement DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', mount);
+        } else {
+            // Attendre que la galerie Hyvä soit rendue (Alpine.js)
+            setTimeout(mount, 300);
         }
     }
-}
-window.visualCompositor = visualCompositor;
-} // fin guard double-Alpine
+
+    initVisualCompositor(<?= /* @noEscape */ $configJson ?>);
+})();
 </script>
-
-<style>
-[x-cloak] { display: none !important; }
-
-.visual-compositor-wrap {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.compositor-canvas {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-/* Visible seulement après 1ère sélection utilisateur */
-.compositor-canvas.compositor-visible {
-    opacity: 1;
-}
-
-.compositor-loader {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255,255,255,0.5);
-    z-index: 11;
-}
-
-.compositor-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #e5e7eb;
-    border-top-color: #1a1a1a;
-    border-radius: 50%;
-    animation: compositor-spin 0.8s linear infinite;
-}
-
-@keyframes compositor-spin {
-    to { transform: rotate(360deg); }
-}
-
-/* Mobile first */
-@media (max-width: 767px) {
-    .compositor-canvas {
-        touch-action: none;
-    }
-}
-</style>
