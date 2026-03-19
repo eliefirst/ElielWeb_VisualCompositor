@@ -1,7 +1,7 @@
 <?php
 $product             = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
-if (!$compositorViewModel || !$compositorViewModel->isEnabled($product)) { return; }
+if (!$compositorViewModel || !$product || !$compositorViewModel->isEnabled($product)) { return; }
 $configJson = $compositorViewModel->getConfigJson($product);
 if ($configJson === '{}') { return; }
 ?>
