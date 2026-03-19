@@ -63,6 +63,7 @@ function visualCompositor(config) {
         visible: false,    // canvas affiché seulement après 1ère sélection
         loading: false,
         images: {},           // cache images chargées { url: HTMLImageElement }
+        imageBounds: config.bounds || {}, // bornes contenu pré-calculées côté PHP { url: {x,y,w,h,iw,ih} }
         currentLayers: {},    // { layerCode: url }
         canvas: null,
         ctx: null,
@@ -331,23 +332,61 @@ function visualCompositor(config) {
 
             const orderedLayers = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
+            // Calcul de la boîte englobante union de toutes les couches actives (coords normalisées 0-1)
+            // Permet de recadrer le canvas sur le bijou réel, comme la photo produit originale
+            let uMinNX = Infinity, uMinNY = Infinity, uMaxNX = -Infinity, uMaxNY = -Infinity;
+            let hasBounds = false;
+            orderedLayers.forEach(layer => {
+                const url = this.currentLayers[layer.code];
+                if (!url || !this.images[url]) return;
+                const b = this.imageBounds[url];
+                if (!b) return;
+                const nx1 = b.x / b.iw, ny1 = b.y / b.ih;
+                const nx2 = (b.x + b.w) / b.iw, ny2 = (b.y + b.h) / b.ih;
+                if (nx1 < uMinNX) uMinNX = nx1;
+                if (ny1 < uMinNY) uMinNY = ny1;
+                if (nx2 > uMaxNX) uMaxNX = nx2;
+                if (ny2 > uMaxNY) uMaxNY = ny2;
+                hasBounds = true;
+            });
+
+            // Légère marge autour du contenu pour ne pas rogner les bords anti-aliasés
+            const PADDING = 0.02;
+            if (hasBounds) {
+                uMinNX = Math.max(0, uMinNX - PADDING);
+                uMinNY = Math.max(0, uMinNY - PADDING);
+                uMaxNX = Math.min(1, uMaxNX + PADDING);
+                uMaxNY = Math.min(1, uMaxNY + PADDING);
+            }
+
             orderedLayers.forEach(layer => {
                 const url = this.currentLayers[layer.code];
                 if (!url || !this.images[url]) return;
                 try {
                     const img = this.images[url];
-                    // Dessiner en mode "contain" : respecte le ratio de l'image, centré dans le canvas
-                    const imgRatio = img.naturalWidth / img.naturalHeight;
+                    let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+
+                    if (hasBounds && this.imageBounds[url]) {
+                        // Source = zone de contenu réel (trim transparence)
+                        const iw = img.naturalWidth, ih = img.naturalHeight;
+                        sx = Math.round(uMinNX * iw);
+                        sy = Math.round(uMinNY * ih);
+                        sw = Math.round((uMaxNX - uMinNX) * iw);
+                        sh = Math.round((uMaxNY - uMinNY) * ih);
+                    }
+
+                    // Contain dans le canvas
+                    const srcRatio    = sw / sh;
                     const canvasRatio = w / h;
                     let dw, dh, dx, dy;
-                    if (imgRatio > canvasRatio) {
-                        dw = w; dh = w / imgRatio;
+                    if (srcRatio > canvasRatio) {
+                        dw = w; dh = w / srcRatio;
                         dx = 0; dy = (h - dh) / 2;
                     } else {
-                        dh = h; dw = h * imgRatio;
+                        dh = h; dw = h * srcRatio;
                         dx = (w - dw) / 2; dy = 0;
                     }
-                    this.ctx.drawImage(img, dx, dy, dw, dh);
+                    this.ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
                 } catch(e) {
                     console.warn('Compositor render error:', layer.code, e);
                 }

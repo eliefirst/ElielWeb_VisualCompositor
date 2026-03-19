@@ -47,15 +47,28 @@ class ProductCompositor implements ArgumentInterface
             \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
         );
 
+        // Transformer file_bounds (clé = chemin relatif) en bounds (clé = URL complète)
+        $fileBounds = $config['file_bounds'] ?? [];
+        unset($config['file_bounds']);
+        $urlBounds = [];
+
         foreach ($config['layers'] as &$layer) {
             if (!empty($layer['default_file'])) {
                 $layer['default_url'] = $mediaUrl . 'compositor/' . $layer['default_file'];
             }
             foreach ($layer['mappings'] as $value => $file) {
-                $layer['mappings'][$value] = $mediaUrl . 'compositor/' . $file;
+                $url = $mediaUrl . 'compositor/' . $file;
+                $layer['mappings'][$value] = $url;
+                if (isset($fileBounds[$file])) {
+                    $urlBounds[$url] = $fileBounds[$file];
+                }
             }
         }
         unset($layer);
+
+        if (!empty($urlBounds)) {
+            $config['bounds'] = $urlBounds;
+        }
 
         return json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
