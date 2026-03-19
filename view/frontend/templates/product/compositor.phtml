@@ -357,6 +357,9 @@ function visualCompositor(config) {
                 uMinNY = Math.max(0, uMinNY - PADDING);
                 uMaxNX = Math.min(1, uMaxNX + PADDING);
                 uMaxNY = Math.min(1, uMaxNY + PADDING);
+                console.log('[Compositor] bounds union (normalized):', {uMinNX, uMinNY, uMaxNX, uMaxNY});
+            } else {
+                console.warn('[Compositor] aucune bounds — config.bounds keys:', Object.keys(config.bounds || {}), '| imageBounds keys:', Object.keys(this.imageBounds));
             }
 
             orderedLayers.forEach(layer => {
