@@ -27,7 +27,7 @@ class ProductCompositor implements ArgumentInterface
     /**
      * Vérifie si le compositor est actif pour ce produit
      */
-    public function isEnabled(ProductInterface $product): bool
+    public function isEnabled(?ProductInterface $product): bool
     {
         return $this->compositionService->isEligible($product);
     }
