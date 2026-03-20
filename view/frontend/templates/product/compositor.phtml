@@ -103,6 +103,8 @@ function visualCompositor(config) {
         mountOnGallery(attempt = 0) {
             // Sélecteurs Hyvä galerie (du plus précis au plus générique)
             const selectors = [
+                '#gallery-main',
+                '#gallery-placeholder',
                 '[data-gallery-role="gallery-placeholder"]',
                 '[data-gallery-role="gallery"]',
                 '.gallery-placeholder',
@@ -150,6 +152,24 @@ function visualCompositor(config) {
                 if (this.ready) this.render();
             });
             this.resizeObserver.observe(this.galleryEl);
+            // Masquer canvas sur thumbnail secondaire, réafficher sur image principale
+            this._onThumbClick = (e) => {
+                setTimeout(() => {
+                    const galleryRoot = document.querySelector('[x-data*="initGallery"]');
+                    if (!galleryRoot) return;
+                    const activeIndex = (galleryRoot._x_dataStack && galleryRoot._x_dataStack[0]) ? galleryRoot._x_dataStack[0].active : 0;
+                    if (activeIndex !== 0) {
+                        this.visible = false;
+                        if (this.ctx) this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                    } else {
+                        if (this.visible || Object.keys(this.currentLayers).length > 0) {
+                            this.visible = true;
+                            this.render();
+                        }
+                    }
+                }, 80);
+            };
+            document.addEventListener('click', this._onThumbClick);
         },
 
         fitCanvas() {
@@ -415,6 +435,7 @@ window.visualCompositor = visualCompositor;
 }
 
 .compositor-canvas {
+    pointer-events: none !important;
     position: absolute;
     inset: 0;
     width: 100%;
@@ -454,6 +475,7 @@ window.visualCompositor = visualCompositor;
 /* Mobile first */
 @media (max-width: 767px) {
     .compositor-canvas {
+    pointer-events: none !important;
         touch-action: none;
     }
 }
