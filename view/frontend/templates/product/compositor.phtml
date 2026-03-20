@@ -1,7 +1,11 @@
 <?php
 $product             = $block->getData('product') ?? $block->getProduct();
 $compositorViewModel = $block->getData('compositor_view_model');
-if (!$compositorViewModel || !$product || !$compositorViewModel->isEnabled($product)) { return; }
+
+if (!$product || !$compositorViewModel) { return; }
+if (!($product instanceof \Magento\Catalog\Api\Data\ProductInterface)) { return; }
+if (!$compositorViewModel->isEnabled($product)) { return; }
+
 $configJson = $compositorViewModel->getConfigJson($product);
 if ($configJson === '{}') { return; }
 ?>
@@ -9,13 +13,9 @@ if ($configJson === '{}') { return; }
 (function() {
     function initVisualCompositor(config) {
         if (!config || !config.enabled) return;
-
         const images  = {};
         const current = {};
-        let canvas    = null;
-        let ctx       = null;
-        let imgEl     = null;
-        let observer  = null;
+        let canvas = null, ctx = null, imgEl = null, observer = null;
 
         function loadImage(url) {
             if (images[url]) return Promise.resolve(images[url]);
@@ -33,56 +33,34 @@ if ($configJson === '{}') { return; }
             const w = imgEl.offsetWidth;
             const h = imgEl.offsetHeight;
             if (!w || !h) return;
-            canvas.width        = w;
-            canvas.height       = h;
-            canvas.style.width  = w + 'px';
-            canvas.style.height = h + 'px';
+            canvas.width = w; canvas.height = h;
+            canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
         }
 
         function render() {
             if (!ctx || !canvas || !canvas.width) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const sorted = [...(config.layers || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-            sorted.forEach(layer => {
+            [...(config.layers || [])].sort((a, b) => (a.sort_order||0)-(b.sort_order||0)).forEach(layer => {
                 const url = current[layer.code];
-                if (url && images[url]) {
-                    try { ctx.drawImage(images[url], 0, 0, canvas.width, canvas.height); } catch(e) {}
-                }
+                if (url && images[url]) { try { ctx.drawImage(images[url], 0, 0, canvas.width, canvas.height); } catch(e){} }
             });
         }
 
         function mount() {
             const galleryMain = document.getElementById('gallery-main');
             if (!galleryMain) return;
-
-            // Trouver l'image principale visible (pas les thumbnails)
             imgEl = galleryMain.querySelector('img');
             if (!imgEl) return;
-
-            // Canvas positionné exactement sur l'image
             const wrapper = imgEl.parentElement;
             wrapper.style.position = 'relative';
-
             canvas = document.createElement('canvas');
             canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:10;';
             wrapper.appendChild(canvas);
             ctx = canvas.getContext('2d');
-
             fitCanvas();
-
-            // ResizeObserver sur l'image elle-même
-            observer = new ResizeObserver(() => {
-                fitCanvas();
-                render();
-            });
+            observer = new ResizeObserver(() => { fitCanvas(); render(); });
             observer.observe(imgEl);
-
-            // Attendre image chargée
-            if (imgEl.complete && imgEl.naturalWidth) {
-                fitCanvas();
-            } else {
-                imgEl.addEventListener('load', fitCanvas);
-            }
+            if (!imgEl.complete) imgEl.addEventListener('load', fitCanvas);
         }
 
         window.addEventListener('option-selected', function(e) {
@@ -109,7 +87,6 @@ if ($configJson === '{}') { return; }
             setTimeout(mount, 500);
         }
     }
-
     initVisualCompositor(<?= /* @noEscape */ $configJson ?>);
 })();
 </script>
